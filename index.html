@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ゴルフルールクイズチャレンジ</title>
+  <style>
+    :root {
+      --green: #0b6b3a;
+      --deep: #073b24;
+      --gold: #d8a928;
+      --light: #f4fbf6;
+      --red: #d94242;
+      --text: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+      background: linear-gradient(160deg, #e8f7ee, #ffffff 45%, #fff8dc);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    .app {
+      width: 100%;
+      max-width: 720px;
+      background: #fff;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,.14);
+      border: 1px solid rgba(11,107,58,.15);
+    }
+    header {
+      background: linear-gradient(135deg, var(--deep), var(--green));
+      color: #fff;
+      padding: 26px 22px;
+      position: relative;
+    }
+    header::after {
+      content: "🏌️";
+      position: absolute;
+      right: 22px;
+      top: 18px;
+      font-size: 48px;
+      opacity: .35;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(216,169,40,.95);
+      color: #1f2937;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 6vw, 36px);
+      line-height: 1.25;
+    }
+    .subtitle {
+      margin: 10px 0 0;
+      opacity: .9;
+      font-size: 15px;
+    }
+    main { padding: 24px; }
+    .screen { display: none; }
+    .screen.active { display: block; animation: fade .25s ease; }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero {
+      background: var(--light);
+      border: 1px solid #d8efdf;
+      padding: 20px;
+      border-radius: 22px;
+      margin-bottom: 18px;
+    }
+    .hero p { margin: 0; line-height: 1.8; }
+    button {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      transition: transform .08s ease, filter .15s ease, background .15s ease;
+    }
+    button:active { transform: scale(.98); }
+    .primary {
+      width: 100%;
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: var(--green);
+      color: white;
+      font-size: 18px;
+    }
+    .primary:hover { filter: brightness(1.08); }
+    .secondary {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 16px;
+      background: #eef2f7;
+      color: #111827;
+      margin-top: 10px;
+    }
+    .progressWrap {
+      margin-bottom: 18px;
+    }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .bar {
+      height: 10px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--green), var(--gold));
+      transition: width .25s ease;
+    }
+    .questionCard {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 22px;
+      padding: 20px;
+    }
+    .question {
+      font-size: clamp(18px, 4vw, 23px);
+      font-weight: 800;
+      line-height: 1.65;
+      margin: 0 0 18px;
+    }
+    .choices {
+      display: grid;
+      gap: 12px;
+    }
+    .choice {
+      width: 100%;
+      text-align: left;
+      padding: 15px 16px;
+      border-radius: 16px;
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      color: #111827;
+    }
+    .choice:hover { background: #f1f8f4; border-color: #b6dfc4; }
+    .choice.correct {
+      background: #dff5e7;
+      border-color: #16a34a;
+    }
+    .choice.wrong {
+      background: #fee2e2;
+      border-color: var(--red);
+    }
+    .feedback {
+      display: none;
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 18px;
+      background: #f8fafc;
+      border-left: 6px solid var(--gold);
+      line-height: 1.8;
+    }
+    .feedback.show { display: block; }
+    .next {
+      margin-top: 16px;
+      display: none;
+    }
+    .next.show { display: block; }
+    .resultBox {
+      text-align: center;
+      padding: 24px 18px;
+    }
+    .scoreBig {
+      font-size: 52px;
+      font-weight: 900;
+      color: var(--green);
+      margin: 8px 0;
+    }
+    .certificate {
+      margin: 18px 0;
+      padding: 22px;
+      border: 3px solid var(--gold);
+      border-radius: 22px;
+      background: #fffdf2;
+    }
+    .certificate h2 {
+      margin: 0 0 8px;
+      font-size: 26px;
+    }
+    .download {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 14px 18px;
+      border-radius: 16px;
+      background: var(--gold);
+      color: #111827;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .note {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.7;
+      margin-top: 14px;
+    }
+    footer {
+      text-align: center;
+      padding: 12px 20px 22px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="badge">来場者限定</div>
+      <h1>ゴルフルールクイズ<br>チャレンジ</h1>
+      <p class="subtitle">全5問正解で「ルールマスター認定」</p>
+    </header>
+
+    <main>
+      <section id="startScreen" class="screen active">
+        <div class="hero">
+          <p>
+            PGA専門競技委員が考案したルールクイズに挑戦！<br>
+            1問ずつ答えて、全問正解を目指してください。
+          </p>
+        </div>
+        <button class="primary" id="startBtn">スタートする</button>
+        <p class="note">※このページはブラウザだけで動作します。スマートフォン対応です。</p>
+      </section>
+
+      <section id="quizScreen" class="screen">
+        <div class="progressWrap">
+          <div class="meta">
+            <span id="countLabel">問題 1 / 5</span>
+            <span id="scoreLabel">スコア 0</span>
+          </div>
+          <div class="bar"><span id="progressBar"></span></div>
+        </div>
+
+        <div class="questionCard">
+          <p class="question" id="questionText"></p>
+          <div class="choices" id="choices"></div>
+          <div class="feedback" id="feedback"></div>
+          <button class="primary next" id="nextBtn">次の問題へ</button>
+        </div>
+      </section>
+
+      <section id="resultScreen" class="screen">
+        <div class="resultBox">
+          <div id="resultEmoji" style="font-size:54px;">🏆</div>
+          <p class="scoreBig" id="finalScore"></p>
+          <div id="resultMessage"></div>
+          <button class="secondary" id="retryBtn">もう一度挑戦する</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      Golf Rules Quiz Challenge
+    </footer>
+  </div>
+
+<script>
+const quiz = [
+  {
+    q: "【問題1】プレーヤーAの球はグリーン手前のフェアウェイにあった。Aはパターで打つことを決めたが、球の前方のグリーン上にある砂が邪魔だったのでその砂を取り除いてからプレーした。Aに罰はつくのか。",
+    choices: ["① 罰はつかない", "② 1打の罰がつく", "③ 2打の罰がつく"],
+    answer: 0,
+    explain: "プレーヤーAの球はフェアウェイにありますが、グリーン上にある砂や土はいつでも取り除くことができます。"
+  },
+  {
+    q: "【問題2】プレーヤーAは1番ホールをプレーしたばかりだが、自分のバッグにクラブが16本入っていることに気づいたので2本取り除いて14本でプレーした。Aの1番ホールには何打の罰がつくのか。",
+    choices: ["① 2打の罰", "② 4打の罰"],
+    answer: 0,
+    explain: "クラブ超過の場合、1本でも2本でもそのホールに2打の罰がつきます。"
+  },
+  {
+    q: "【問題3】プレーヤーAとBの球はグリーンまで同じような距離にあった。Aが先にプレーしてナイスオン。Bが何番で打ったのかを尋ねたらBは7番アイアンで打ったと答えた。この場合だれに罰はつくのか。",
+    choices: ["① Aにだけ2打の罰がつく", "② Bにだけ2打の罰がつく", "③ AとB両者に2打の罰がつく"],
+    answer: 2,
+    explain: "ラウンド中、プレーヤーはアドバイスを求めたり、アドバイスを与えたりすることに制限があります。この場合、求めた側と与えた側の両者に罰がつきます。"
+  },
+  {
+    q: "【問題4】プレーヤーAの球の近くに毒蛇がいて怖くて打てません。この場合Aに許される行為はなに。",
+    choices: ["① 怖くてもそのままプレーするしかない", "② 1打の罰でアンプレヤブルするしかない", "③ ホールに近づかなければ安全な場所から別の球をプレーできる"],
+    answer: 2,
+    explain: "毒蛇や刺す蜂、ワニなどの危険な動物のためにプレーできない場合は、無罰での救済が認められています。"
+  },
+  {
+    q: "【問題5】プレーヤーAの球は打球の勢いでフェアウェイに埋まっていた。この場合Aには無罰での救済が認められるのか。",
+    choices: ["① 認められる", "② 認められない"],
+    answer: 0,
+    explain: "プレーヤーの球が打球の勢いで地面に埋まった場合は、ホールに近づかず球の直後から1クラブ以内の場所に元の球か別の球をドロップできます。"
+  }
+];
+
+let current = 0;
+let score = 0;
+let answered = false;
+
+const startScreen = document.getElementById("startScreen");
+const quizScreen = document.getElementById("quizScreen");
+const resultScreen = document.getElementById("resultScreen");
+const startBtn = document.getElementById("startBtn");
+const retryBtn = document.getElementById("retryBtn");
+const nextBtn = document.getElementById("nextBtn");
+const questionText = document.getElementById("questionText");
+const choicesEl = document.getElementById("choices");
+const feedback = document.getElementById("feedback");
+const countLabel = document.getElementById("countLabel");
+const scoreLabel = document.getElementById("scoreLabel");
+const progressBar = document.getElementById("progressBar");
+
+function showScreen(screen) {
+  [startScreen, quizScreen, resultScreen].forEach(s => s.classList.remove("active"));
+  screen.classList.add("active");
+}
+
+function startQuiz() {
+  current = 0;
+  score = 0;
+  answered = false;
+  showScreen(quizScreen);
+  renderQuestion();
+}
+
+function renderQuestion() {
+  answered = false;
+  const item = quiz[current];
+  questionText.textContent = item.q;
+  choicesEl.innerHTML = "";
+  feedback.classList.remove("show");
+  feedback.innerHTML = "";
+  nextBtn.classList.remove("show");
+  countLabel.textContent = `問題 ${current + 1} / ${quiz.length}`;
+  scoreLabel.textContent = `スコア ${score}`;
+  progressBar.style.width = `${(current / quiz.length) * 100}%`;
+
+  item.choices.forEach((choice, index) => {
+    const btn = document.createElement("button");
+    btn.className = "choice";
+    btn.textContent = choice;
+    btn.onclick = () => selectAnswer(index, btn);
+    choicesEl.appendChild(btn);
+  });
+}
+
+function selectAnswer(index) {
+  if (answered) return;
+  answered = true;
+
+  const item = quiz[current];
+  const buttons = [...document.querySelectorAll(".choice")];
+
+  buttons.forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === item.answer) btn.classList.add("correct");
+    if (i === index && i !== item.answer) btn.classList.add("wrong");
+  });
+
+  const correct = index === item.answer;
+  if (correct) score++;
+
+  feedback.classList.add("show");
+  feedback.innerHTML = `
+    <strong>${correct ? "正解！！" : "不正解"}</strong><br>
+    ${correct ? "" : "正解は「" + item.choices[item.answer] + "」です。<br>"}
+    ${item.explain}
+  `;
+
+  scoreLabel.textContent = `スコア ${score}`;
+  progressBar.style.width = `${((current + 1) / quiz.length) * 100}%`;
+  nextBtn.textContent = current === quiz.length - 1 ? "結果を見る" : "次の問題へ";
+  nextBtn.classList.add("show");
+}
+
+function nextQuestion() {
+  current++;
+  if (current < quiz.length) {
+    renderQuestion();
+  } else {
+    showResult();
+  }
+}
+
+function showResult() {
+  showScreen(resultScreen);
+  document.getElementById("finalScore").textContent = `${score} / ${quiz.length}`;
+  const resultEmoji = document.getElementById("resultEmoji");
+  const resultMessage = document.getElementById("resultMessage");
+
+  if (score === quiz.length) {
+    resultEmoji.textContent = "🏆";
+    resultMessage.innerHTML = `
+      <div class="certificate">
+        <h2>ルールマスター認定</h2>
+        <p>全問正解おめでとうございます！</p>
+        <p>あなたは本日のゴルフルールクイズを完全制覇しました。</p>
+        <a class="download" href="#" onclick="alert('ここに特典画像のURLを設定できます'); return false;">特典画像をダウンロード</a>
+      </div>
+    `;
+  } else {
+    resultEmoji.textContent = "⛳";
+    resultMessage.innerHTML = `
+      <p><strong>惜しい！</strong></p>
+      <p>もう一度チャレンジして、全問正解を目指しましょう。</p>
+    `;
+  }
+}
+
+startBtn.addEventListener("click", startQuiz);
+nextBtn.addEventListener("click", nextQuestion);
+retryBtn.addEventListener("click", startQuiz);
+</script>
+</body>
+</html>
