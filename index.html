@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.3</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.4</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -192,6 +192,46 @@
       color:#475467;
       font-size:13px;
       line-height:1.7;
+    }
+    .qrGrid {
+      display:grid;
+      grid-template-columns:1fr;
+      gap:12px;
+      margin-top:12px;
+    }
+    @media (min-width:760px) {
+      .qrGrid {
+        grid-template-columns:repeat(2,1fr);
+      }
+    }
+    .qrCard {
+      border:1px solid #d0d5dd;
+      border-radius:18px;
+      padding:14px;
+      background:#fff;
+      display:grid;
+      grid-template-columns:96px 1fr;
+      gap:12px;
+      align-items:center;
+    }
+    .qrCard img {
+      width:96px;
+      height:96px;
+      border-radius:10px;
+      border:1px solid #e2e8f0;
+      background:white;
+    }
+    .qrTitle {
+      font-weight:900;
+      font-size:18px;
+      color:#073b24;
+      margin-bottom:4px;
+    }
+    .qrUrl {
+      font-size:11px;
+      color:#667085;
+      word-break:break-all;
+      line-height:1.5;
     }
     .statusBadge {
       display:inline-block;
@@ -889,8 +929,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.3</h1>
-  <p>Firebase自動同期対応</p>
+  <h1>スコアラー入力プロトタイプ v12.4</h1>
+  <p>QR組固定対応</p>
 </header>
 
 <div class="wrap">
@@ -1175,6 +1215,21 @@
     <div class="card">
       <div class="between">
         <div>
+          <span class="pill">QR SETUP</span>
+          <h2 class="holeTitle">担当組固定QR</h2>
+        </div>
+        <button class="ghost" id="renderQrBtn">QR一覧を更新</button>
+      </div>
+      <p class="small">
+        スコアラーはQRを読み込むだけで担当組固定画面を開けます。
+        URLに group=組番号 が付くため、スコアラー側では組変更できません。
+      </p>
+      <div id="groupQrList" class="qrGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="between">
+        <div>
           <span class="pill">SCORER URL</span>
           <h2 class="holeTitle">担当組固定URL</h2>
         </div>
@@ -1314,6 +1369,21 @@
     <p id="deviceSuccessText"></p>
     <div class="footerButtons">
       <button class="blue" id="closeDeviceSuccess">スコアラー画面へ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBackdrop" id="qrModal">
+  <div class="modal">
+    <h2 id="qrModalTitle">担当組QR</h2>
+    <p class="small">このQRをスコアラー端末で読み込んでください。</p>
+    <div style="text-align:center;margin:14px 0;">
+      <img id="qrModalImage" alt="QR" style="width:220px;height:220px;border:1px solid #d0d5dd;border-radius:16px;background:white;">
+    </div>
+    <p id="qrModalUrl" class="small" style="word-break:break-all;"></p>
+    <div class="footerButtons">
+      <button class="ghost" id="closeQrModal">閉じる</button>
+      <button class="blue" id="copyQrUrlBtn">URLをコピー</button>
     </div>
   </div>
 </div>
@@ -1827,6 +1897,7 @@ function loadCsvData(text) {
   renderRanking();
   renderNotices();
   renderDeviceGroupList();
+  renderGroupQrList();
   renderGroupUrls();
   applyFixedGroupFromUrl();
   renderMonitor();
@@ -2632,6 +2703,58 @@ function clearDeviceGroup() {
   toast("端末設定を解除しました");
 }
 
+function qrImageUrl(data) {
+  return "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(data);
+}
+
+function renderGroupQrList() {
+  const list = $("groupQrList");
+  if (!list) return;
+
+  if (!state.groups.length) {
+    list.innerHTML = `<div class="noticeEmpty">大会データを読み込むとQR一覧が表示されます。</div>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  state.groups.forEach(group => {
+    const url = scorerUrlForGroup(group.id);
+    const card = document.createElement("button");
+    card.className = "qrCard";
+    card.innerHTML = `
+      <img src="${qrImageUrl(url)}" alt="${group.name} QR">
+      <div>
+        <div class="qrTitle">${group.name}</div>
+        <div class="small">${group.plannedStart || "-"} / ${group.startHole || 1}H</div>
+        <div class="qrUrl">${url}</div>
+      </div>
+    `;
+    card.onclick = () => openQrModal(group.id);
+    list.appendChild(card);
+  });
+}
+
+function openQrModal(groupId) {
+  const group = state.groups.find(g => Number(g.id) === Number(groupId));
+  if (!group) return;
+  const url = scorerUrlForGroup(group.id);
+  $("qrModalTitle").textContent = `${group.name} 担当組固定QR`;
+  $("qrModalImage").src = qrImageUrl(url);
+  $("qrModalUrl").textContent = url;
+  $("copyQrUrlBtn").dataset.copyUrl = url;
+  showModal("qrModal");
+}
+
+async function copyQrUrl() {
+  const url = $("copyQrUrlBtn").dataset.copyUrl || "";
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("URLをコピーしました");
+  } catch(e) {
+    toast("コピーできませんでした。URLを手動で選択してください");
+  }
+}
+
 function renderGroupUrls() {
   const list = $("groupUrlList");
   if (!list) return;
@@ -3408,6 +3531,7 @@ function switchTab(target) {
     $("setupScreen").classList.add("active");
     if (!$("csvInput").value.trim()) $("csvInput").value = SAMPLE_CSV;
     renderDeviceGroupList();
+    renderGroupQrList();
     renderGroupUrls();
     renderParInput();
   }
@@ -3508,6 +3632,14 @@ $("clearDeviceGroupBtn").onclick = () => {
 };
 
 $("applyParBtn").onclick = applyParInput;
+
+$("renderQrBtn").onclick = () => {
+  renderGroupQrList();
+  toast("担当組固定QR一覧を更新しました");
+};
+
+$("closeQrModal").onclick = () => hideModal("qrModal");
+$("copyQrUrlBtn").onclick = copyQrUrl;
 
 $("renderUrlsBtn").onclick = () => {
   renderGroupUrls();
