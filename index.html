@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.1</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -889,8 +889,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12</h1>
-  <p>Firebase Firestore同期対応</p>
+  <h1>スコアラー入力プロトタイプ v12.1</h1>
+  <p>Firebase診断・手動同期対応</p>
 </header>
 
 <div class="wrap">
@@ -919,6 +919,13 @@
         この試作版では確認用に組を切り替えられます。
       </p>
       <div id="fixedGroupNotice" class="fixedNotice"></div>
+      <div class="notice show" id="firebasePanel" style="background:#eef7ff;border-color:#93c5fd;color:#0b3b82;">
+        Firebase状態：<span id="firebaseStatusText">確認中</span>
+        <div class="utility">
+          <button class="blue" id="manualPushBtn">この端末のデータをFirebaseへ送信</button>
+          <button class="ghost" id="manualPullBtn">Firebaseから読込</button>
+        </div>
+      </div>
       <div id="modeBanner" class="modeBanner test"></div>
       <div class="modeControls">
         <button class="blue" id="switchLiveBtn">本番へ切替</button>
@@ -1485,6 +1492,8 @@ function saveState(options = {}) {
 function setFirebaseStatus(message) {
   const el = $("firebaseStatus");
   if (el) el.textContent = "Firebase：" + message;
+  const el2 = $("firebaseStatusText");
+  if (el2) el2.textContent = message;
 }
 
 function initFirebaseSync() {
@@ -1493,25 +1502,25 @@ function initFirebaseSync() {
       setFirebaseStatus("SDK未読込");
       return;
     }
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 
-    firebase.initializeApp(firebaseConfig);
     firebaseDb = firebase.firestore();
-    firebaseDocRef = firebaseDb
-      .collection("tournaments")
-      .doc(FIREBASE_TOURNAMENT_ID);
+    firebaseDocRef = firebaseDb.collection("tournaments").doc(FIREBASE_TOURNAMENT_ID);
 
     firebaseReady = true;
     setFirebaseStatus("接続中");
 
     firebaseDocRef.onSnapshot(snapshot => {
       if (!snapshot.exists) {
-        saveRemoteStateNow(true);
-        setFirebaseStatus("初期データ作成");
+        setFirebaseStatus("Firebaseにデータなし。手動送信してください");
         return;
       }
 
       const data = snapshot.data();
-      if (!data || !data.state) return;
+      if (!data || !data.state) {
+        setFirebaseStatus("Firebaseデータ形式なし");
+        return;
+      }
 
       if (lastRemoteUpdatedAt && data.updatedAt === lastRemoteUpdatedAt) return;
 
@@ -1521,14 +1530,14 @@ function initFirebaseSync() {
       normalizeLoadedState();
       renderAllScreens();
       applyingRemoteState = false;
-      setFirebaseStatus("同期中");
+      setFirebaseStatus("受信 " + nowTimeLabel());
     }, error => {
       console.error("Firestore snapshot error:", error);
-      setFirebaseStatus("接続エラー");
+      setFirebaseStatus("受信エラー：" + error.code);
     });
   } catch (error) {
     console.error("Firebase init error:", error);
-    setFirebaseStatus("初期化エラー");
+    setFirebaseStatus("初期化エラー：" + error.message);
   }
 }
 
@@ -1539,19 +1548,56 @@ function scheduleRemoteSave() {
 }
 
 function saveRemoteStateNow(isInitial = false) {
-  if (!firebaseReady || !firebaseDocRef || applyingRemoteState) return;
+  if (!firebaseReady || !firebaseDocRef || applyingRemoteState) {
+    setFirebaseStatus("未接続のため送信不可");
+    return;
+  }
   const updatedAt = new Date().toISOString();
   lastRemoteUpdatedAt = updatedAt;
 
+  setFirebaseStatus("送信中");
   firebaseDocRef.set({
-    state,
+    state: JSON.parse(JSON.stringify(state)),
     updatedAt,
     source: isInitial ? "initial" : "client"
   }, { merge: true }).then(() => {
     setFirebaseStatus("保存済 " + nowTimeLabel());
   }).catch(error => {
     console.error("Firestore save error:", error);
-    setFirebaseStatus("保存エラー");
+    setFirebaseStatus("保存エラー：" + error.code);
+  });
+}
+
+function pullRemoteStateNow() {
+  if (!firebaseReady || !firebaseDocRef) {
+    setFirebaseStatus("未接続のため読込不可");
+    return;
+  }
+  setFirebaseStatus("読込中");
+  firebaseDocRef.get().then(snapshot => {
+    if (!snapshot.exists) {
+      setFirebaseStatus("Firebaseにデータがありません");
+      return;
+    }
+    const data = snapshot.data();
+    if (!data || !data.state) {
+      setFirebaseStatus("Firebaseデータ形式なし");
+      return;
+    }
+    applyingRemoteState = true;
+    state = data.state;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    normalizeLoadedState();
+    
+$("manualPushBtn").onclick = () => saveRemoteStateNow(false);
+$("manualPullBtn").onclick = pullRemoteStateNow;
+
+renderAllScreens();
+    applyingRemoteState = false;
+    setFirebaseStatus("読込完了 " + nowTimeLabel());
+  }).catch(error => {
+    console.error("Firestore pull error:", error);
+    setFirebaseStatus("読込エラー：" + error.code);
   });
 }
 
