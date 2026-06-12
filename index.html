@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.5</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,17 +942,19 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.5</h1>
-  <p>大会管理・大会ID切替対応</p>
+  <h1>スコアラー入力プロトタイプ v12.9</h1>
+  <p>スコアラーUI完成版</p>
 </header>
 
 <div class="wrap">
   <div class="tabs">
-    <button class="tab active" id="scorerTab">スコアラー側</button>
-    <button class="tab" id="leaderboardTab">本部管理</button>
-    <button class="tab" id="monitorTab">本部モニター</button>
-    <button class="tab" id="publicTab">一般モニター</button>
-    <button class="tab" id="setupTab">大会データ</button>
+    <button class="tab active" id="scorerTab">スコア入力</button>
+    <button class="tab scorerOnlyTab" id="scorerHbhTab">ホールバイホール</button>
+    <button class="tab scorerOnlyTab" id="scorerRankingTab">ランキング</button>
+    <button class="tab hqOnly" id="leaderboardTab">本部管理</button>
+    <button class="tab hqOnly" id="monitorTab">本部モニター</button>
+    <button class="tab hqOnly" id="publicTab">一般モニター</button>
+    <button class="tab hqOnly" id="setupTab">大会データ</button>
   </div>
 
   <section id="scorerScreen" class="screen active">
@@ -1000,6 +1002,30 @@
       <div id="playersArea"></div>
       <div class="notice" id="autoMoveNotice"></div>
       <button class="secondary" id="forceNextHoleBtn" style="display:none;">全員完了済み：次ホールへ進む</button>
+    </div>
+  </section>
+
+  <section id="scorerHbhScreen" class="screen">
+    <div class="card">
+      <div>
+        <span class="pill">HOLE BY HOLE</span>
+        <h2 class="holeTitle">担当組ホールバイホール</h2>
+      </div>
+      <p class="small">担当組のホール別スコアとショット履歴を確認できます。</p>
+      <div id="scorerHbhList"></div>
+    </div>
+  </section>
+
+  <section id="scorerRankingScreen" class="screen">
+    <div class="publicBoard">
+      <div class="publicHeader">
+        <div>
+          <h2>LEADERBOARD</h2>
+          <p>担当選手は黄色背景で表示されます</p>
+        </div>
+        <div class="publicTime" id="scorerRankingUpdated">--:--</div>
+      </div>
+      <div id="scorerRankingBoard"></div>
     </div>
   </section>
 
@@ -1679,7 +1705,10 @@ function normalizeLoadedState() {
 function renderAllScreens() {
   try {
     applyFixedGroupFromUrl();
+    applyUiMode();
     renderScorer();
+    renderScorerHbh();
+    renderScorerRanking();
     renderRanking();
     renderNotices();
     renderStartControl();
@@ -1973,7 +2002,10 @@ function loadCsvData(text) {
   applyFixedGroupFromUrl();
   renderMonitor();
   renderPublicLeaderboard();
+  applyUiMode();
   renderScorer();
+  renderScorerHbh();
+  renderScorerRanking();
   toast("大会データを読み込みました");
 }
 
@@ -3158,6 +3190,139 @@ function bindPublicLeaderboardButtons() {
   });
 }
 
+
+function isScorerMode() {
+  return isGroupFixed();
+}
+
+function applyUiMode() {
+  document.body.classList.toggle("scorer-mode", isScorerMode());
+}
+
+function scorerGroupPlayerIds() {
+  const group = currentGroup();
+  return group ? group.players.map(p => p.id) : [];
+}
+
+function scorerShotHistory(player, hole) {
+  const shots = player.shots?.["h" + hole] || [];
+  if (!shots.length) return "";
+  return `
+    <div class="shotHistoryItem">
+      <strong>${hole}H</strong><br>
+      ${shots.map((s, idx) => `${idx + 1}打目 ${s}`).join(" ／ ")}
+    </div>
+  `;
+}
+
+function renderScorerHbh() {
+  const el = $("scorerHbhList");
+  if (!el) return;
+
+  const group = currentGroup();
+  if (!group) {
+    el.innerHTML = `<div class="noticeEmpty">担当組がありません。</div>`;
+    return;
+  }
+
+  const outHoles = [1,2,3,4,5,6,7,8,9];
+  const inHoles = [10,11,12,13,14,15,16,17,18];
+  const players = group.players.filter(p => p.status !== "withdrawn" && p.status !== "dns");
+
+  if (!players.length) {
+    el.innerHTML = `<div class="noticeEmpty">表示できる選手がいません。</div>`;
+    return;
+  }
+
+  el.innerHTML = players.map(player => {
+    const outTotal = hbhSubtotal(player, outHoles);
+    const inTotal = hbhSubtotal(player, inHoles);
+    const outToPar = hbhToPar(player, outHoles);
+    const inToPar = hbhToPar(player, inHoles);
+    const totalStrokes = totalScore(player);
+    const totalToPar = parDiffLabel(playerScoreToPar(player));
+    const history = [...outHoles, ...inHoles].map(h => scorerShotHistory(player, h)).filter(Boolean).join("");
+
+    return `
+      <div class="hbhPlayerCard">
+        <div class="hbhPlayerHeader">
+          <div>
+            <div class="hbhPlayerName">${player.name}</div>
+            <div class="small">${player.affiliation || ""}</div>
+          </div>
+          <span class="timeStatus ${parDiffClass(playerScoreToPar(player))}">${totalToPar}</span>
+        </div>
+        <div class="scorerHbhBox">
+          <table class="scorerHbhTable">
+            <tr><th class="scorerHbhLabel">Hole</th>${outHoles.map(h => `<th>${h}</th>`).join("")}<th>OUT</th></tr>
+            <tr><td class="scorerHbhLabel">Par</td>${outHoles.map(h => `<td>${getParForHole(h)}</td>`).join("")}<td><strong>${hbhParTotal(outHoles)}</strong></td></tr>
+            <tr><td class="scorerHbhLabel">Score</td>${outHoles.map(h => `<td>${getPlayerScoreForHole(player,h)}</td>`).join("")}<td><strong>${outTotal}</strong></td></tr>
+            <tr><td class="scorerHbhLabel">±</td>${outHoles.map(h => {
+              const score = player.scores?.["h" + h];
+              const diff = score == null ? null : Number(score) - getParForHole(h);
+              return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
+            }).join("")}<td><strong>${outToPar}</strong></td></tr>
+            <tr><th class="scorerHbhLabel">Hole</th>${inHoles.map(h => `<th>${h}</th>`).join("")}<th>IN</th></tr>
+            <tr><td class="scorerHbhLabel">Par</td>${inHoles.map(h => `<td>${getParForHole(h)}</td>`).join("")}<td><strong>${hbhParTotal(inHoles)}</strong></td></tr>
+            <tr><td class="scorerHbhLabel">Score</td>${inHoles.map(h => `<td>${getPlayerScoreForHole(player,h)}</td>`).join("")}<td><strong>${inTotal}</strong></td></tr>
+            <tr><td class="scorerHbhLabel">±</td>${inHoles.map(h => {
+              const score = player.scores?.["h" + h];
+              const diff = score == null ? null : Number(score) - getParForHole(h);
+              return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
+            }).join("")}<td><strong>${inToPar}</strong></td></tr>
+            <tr><td class="scorerHbhLabel">TOTAL</td><td colspan="5"><strong>Score ${totalStrokes}</strong></td><td colspan="5"><strong>± ${totalToPar}</strong></td></tr>
+          </table>
+        </div>
+        ${history ? `<div class="shotHistoryGrid">${history}</div>` : `<p class="small">ショット履歴はまだありません。</p>`}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderScorerRanking() {
+  const el = $("scorerRankingBoard");
+  const updated = $("scorerRankingUpdated");
+  if (!el) return;
+  if (updated) updated.textContent = `更新 ${nowTimeLabel()}`;
+
+  const myIds = scorerGroupPlayerIds();
+  const rows = getRankingRows()
+    .filter(r => r.status !== "withdrawn" && r.status !== "dns")
+    .sort((a,b) => {
+      const diff = playerScoreToPar(a.player) - playerScoreToPar(b.player);
+      if (diff !== 0) return diff;
+      return b.holes - a.holes || totalScore(a.player) - totalScore(b.player) || a.player.name.localeCompare(b.player.name, "ja");
+    });
+
+  if (!rows.length) {
+    el.innerHTML = `<div class="noticeEmpty">ランキングデータはまだありません。</div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <table class="publicTable">
+      <thead>
+        <tr><th>順位</th><th>選手</th><th style="text-align:right;">SCORE</th><th>THRU</th><th style="text-align:right;">TOTAL</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map((r,i) => {
+          const mine = myIds.includes(r.player.id);
+          const scoreToPar = playerScoreToPar(r.player);
+          return `
+            <tr class="${mine ? "highlightPlayerRow" : ""}">
+              <td class="publicRank">${i + 1}</td>
+              <td class="publicPlayer">${mine ? "★ " : ""}${r.player.name}<br><span class="publicStatus">${r.player.affiliation || ""}</span></td>
+              <td class="publicScoreToPar ${parDiffClass(scoreToPar)}">${parDiffLabel(scoreToPar)}</td>
+              <td class="publicStatus">${r.holes}H</td>
+              <td class="publicScore">${totalScore(r.player)}</td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
 function renderPublicLeaderboard() {
   const el = $("publicLeaderboard");
   const updated = $("publicUpdated");
@@ -3629,11 +3794,28 @@ function applyParInput() {
 }
 
 function switchTab(target) {
-  ["scorerTab","leaderboardTab","monitorTab","publicTab","setupTab"].forEach(id => $(id).classList.remove("active"));
-  ["scorerScreen","leaderboardScreen","monitorScreen","publicScreen","setupScreen"].forEach(id => $(id).classList.remove("active"));
+  ["scorerTab","scorerHbhTab","scorerRankingTab","leaderboardTab","monitorTab","publicTab","setupTab"].forEach(id => {
+    const el = $(id);
+    if (el) el.classList.remove("active");
+  });
+  ["scorerScreen","scorerHbhScreen","scorerRankingScreen","leaderboardScreen","monitorScreen","publicScreen","setupScreen"].forEach(id => {
+    const el = $(id);
+    if (el) el.classList.remove("active");
+  });
+
   if (target === "scorer") {
     $("scorerTab").classList.add("active");
     $("scorerScreen").classList.add("active");
+  }
+  if (target === "scorerHbh") {
+    $("scorerHbhTab").classList.add("active");
+    $("scorerHbhScreen").classList.add("active");
+    renderScorerHbh();
+  }
+  if (target === "scorerRanking") {
+    $("scorerRankingTab").classList.add("active");
+    $("scorerRankingScreen").classList.add("active");
+    renderScorerRanking();
   }
   if (target === "leaderboard") {
     $("leaderboardTab").classList.add("active");
@@ -3666,6 +3848,8 @@ function switchTab(target) {
 }
 
 $("scorerTab").onclick = () => switchTab("scorer");
+$("scorerHbhTab").onclick = () => switchTab("scorerHbh");
+$("scorerRankingTab").onclick = () => switchTab("scorerRanking");
 $("leaderboardTab").onclick = () => switchTab("leaderboard");
 $("monitorTab").onclick = () => switchTab("monitor");
 $("publicTab").onclick = () => switchTab("public");
@@ -3919,7 +4103,10 @@ $("toggleFirebaseDebugBtn").onclick = () => {
 };
 
 applyFixedGroupFromUrl();
+applyUiMode();
 renderScorer();
+renderScorerHbh();
+renderScorerRanking();
 renderRanking();
 renderNotices();
 renderGroupUrls();
