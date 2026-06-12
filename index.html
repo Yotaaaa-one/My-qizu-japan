@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9.2</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9.3</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,8 +942,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.9.2</h1>
-  <p>QR固定3タブ表示修正版</p>
+  <h1>スコアラー入力プロトタイプ v12.9.3</h1>
+  <p>スコアラーランキング・HBHスマホ最適化版</p>
 </header>
 
 <div class="wrap">
@@ -3254,9 +3254,8 @@ function renderScorerHbh() {
     return;
   }
 
-  const outHoles = [1,2,3,4,5,6,7,8,9];
-  const inHoles = [10,11,12,13,14,15,16,17,18];
   const players = group.players.filter(p => p.status !== "withdrawn" && p.status !== "dns");
+  const holes = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
 
   if (!players.length) {
     el.innerHTML = `<div class="noticeEmpty">表示できる選手がいません。</div>`;
@@ -3264,13 +3263,25 @@ function renderScorerHbh() {
   }
 
   el.innerHTML = players.map(player => {
-    const outTotal = hbhSubtotal(player, outHoles);
-    const inTotal = hbhSubtotal(player, inHoles);
-    const outToPar = hbhToPar(player, outHoles);
-    const inToPar = hbhToPar(player, inHoles);
-    const totalStrokes = totalScore(player);
     const totalToPar = parDiffLabel(playerScoreToPar(player));
-    const history = [...outHoles, ...inHoles].map(h => scorerShotHistory(player, h)).filter(Boolean).join("");
+    const scoreButtons = holes.map(h => {
+      const score = getPlayerScoreForHole(player, h);
+      const played = score !== "-";
+      const shotHistory = scorerShotHistory(player, h);
+      const diff = player.scores?.["h" + h] == null ? "-" : parDiffLabel(Number(player.scores["h" + h]) - getParForHole(h));
+      return `
+        <div>
+          <button class="scoreTapBtn ${played ? "played" : ""}" data-shot-detail="${player.id}_${h}">
+            ${h}H<br>
+            <span style="font-size:18px;">${score}</span><br>
+            <span class="${played ? parDiffClass(Number(player.scores["h" + h]) - getParForHole(h)) : ""}" style="font-size:12px;">${diff}</span>
+          </button>
+          <div class="scoreDetailPanel" id="shotDetail_${player.id}_${h}">
+            ${shotHistory || `<div class="shotHistoryItem">${h}H：ショット履歴はまだありません。</div>`}
+          </div>
+        </div>
+      `;
+    }).join("");
 
     return `
       <div class="hbhPlayerCard">
@@ -3281,31 +3292,22 @@ function renderScorerHbh() {
           </div>
           <span class="timeStatus ${parDiffClass(playerScoreToPar(player))}">${totalToPar}</span>
         </div>
-        <div class="scorerHbhBox">
-          <table class="scorerHbhTable">
-            <tr><th class="scorerHbhLabel">Hole</th>${outHoles.map(h => `<th>${h}</th>`).join("")}<th>OUT</th></tr>
-            <tr><td class="scorerHbhLabel">Par</td>${outHoles.map(h => `<td>${getParForHole(h)}</td>`).join("")}<td><strong>${hbhParTotal(outHoles)}</strong></td></tr>
-            <tr><td class="scorerHbhLabel">Score</td>${outHoles.map(h => `<td>${getPlayerScoreForHole(player,h)}</td>`).join("")}<td><strong>${outTotal}</strong></td></tr>
-            <tr><td class="scorerHbhLabel">±</td>${outHoles.map(h => {
-              const score = player.scores?.["h" + h];
-              const diff = score == null ? null : Number(score) - getParForHole(h);
-              return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
-            }).join("")}<td><strong>${outToPar}</strong></td></tr>
-            <tr><th class="scorerHbhLabel">Hole</th>${inHoles.map(h => `<th>${h}</th>`).join("")}<th>IN</th></tr>
-            <tr><td class="scorerHbhLabel">Par</td>${inHoles.map(h => `<td>${getParForHole(h)}</td>`).join("")}<td><strong>${hbhParTotal(inHoles)}</strong></td></tr>
-            <tr><td class="scorerHbhLabel">Score</td>${inHoles.map(h => `<td>${getPlayerScoreForHole(player,h)}</td>`).join("")}<td><strong>${inTotal}</strong></td></tr>
-            <tr><td class="scorerHbhLabel">±</td>${inHoles.map(h => {
-              const score = player.scores?.["h" + h];
-              const diff = score == null ? null : Number(score) - getParForHole(h);
-              return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
-            }).join("")}<td><strong>${inToPar}</strong></td></tr>
-            <tr><td class="scorerHbhLabel">TOTAL</td><td colspan="5"><strong>Score ${totalStrokes}</strong></td><td colspan="5"><strong>± ${totalToPar}</strong></td></tr>
-          </table>
-        </div>
-        ${history ? `<div class="shotHistoryGrid">${history}</div>` : `<p class="small">ショット履歴はまだありません。</p>`}
+        <div class="hbhScoreGrid">${scoreButtons}</div>
       </div>
     `;
   }).join("");
+
+  bindScorerHbhButtons();
+}
+
+function bindScorerHbhButtons() {
+  document.querySelectorAll("[data-shot-detail]").forEach(btn => {
+    btn.onclick = () => {
+      const id = "shotDetail_" + btn.dataset.shotDetail;
+      const panel = document.getElementById(id);
+      if (panel) panel.classList.toggle("show");
+    };
+  });
 }
 
 function renderScorerRanking() {
@@ -3329,26 +3331,31 @@ function renderScorerRanking() {
   }
 
   el.innerHTML = `
-    <table class="publicTable">
-      <thead>
-        <tr><th>順位</th><th>選手</th><th style="text-align:right;">SCORE</th><th>THRU</th><th style="text-align:right;">TOTAL</th></tr>
-      </thead>
-      <tbody>
-        ${rows.map((r,i) => {
-          const mine = myIds.includes(r.player.id);
-          const scoreToPar = playerScoreToPar(r.player);
-          return `
-            <tr class="${mine ? "highlightPlayerRow" : ""}">
-              <td class="publicRank">${i + 1}</td>
-              <td class="publicPlayer">${mine ? "★ " : ""}${r.player.name}<br><span class="publicStatus">${r.player.affiliation || ""}</span></td>
-              <td class="publicScoreToPar ${parDiffClass(scoreToPar)}">${parDiffLabel(scoreToPar)}</td>
-              <td class="publicStatus">${r.holes}H</td>
-              <td class="publicScore">${totalScore(r.player)}</td>
-            </tr>
-          `;
-        }).join("")}
-      </tbody>
-    </table>
+    <div class="scorerRankList">
+      ${rows.map((r,i) => {
+        const mine = myIds.includes(r.player.id);
+        const scoreToPar = playerScoreToPar(r.player);
+        return `
+          <div class="scorerRankCard ${mine ? "mine" : ""}">
+            <div class="scorerRankTop">
+              <div style="display:flex;gap:10px;">
+                <div class="scorerRankNo">${i + 1}</div>
+                <div>
+                  <div class="scorerRankName">${mine ? "★ " : ""}${r.player.name}</div>
+                  <div class="scorerRankAff">${r.player.affiliation || ""}</div>
+                </div>
+              </div>
+              <div class="${parDiffClass(scoreToPar)}" style="font-size:22px;font-weight:900;">${parDiffLabel(scoreToPar)}</div>
+            </div>
+            <div class="scorerRankStats">
+              <div class="scorerRankStat">SCORE<strong class="${parDiffClass(scoreToPar)}">${parDiffLabel(scoreToPar)}</strong></div>
+              <div class="scorerRankStat">THRU<strong>${r.holes}H</strong></div>
+              <div class="scorerRankStat">TOTAL<strong>${totalScore(r.player)}</strong></div>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
   `;
 }
 
