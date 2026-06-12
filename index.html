@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.4</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.5</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -232,6 +232,19 @@
       color:#667085;
       word-break:break-all;
       line-height:1.5;
+    }
+    .tournamentBox {
+      border:1px solid #d0d5dd;
+      border-radius:18px;
+      padding:14px;
+      background:#f8fafc;
+      margin-top:12px;
+    }
+    .tournamentCurrent {
+      font-size:18px;
+      font-weight:900;
+      color:#073b24;
+      word-break:break-all;
     }
     .statusBadge {
       display:inline-block;
@@ -929,8 +942,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.4</h1>
-  <p>QR組固定対応</p>
+  <h1>スコアラー入力プロトタイプ v12.5</h1>
+  <p>大会管理・大会ID切替対応</p>
 </header>
 
 <div class="wrap">
@@ -1158,6 +1171,35 @@
   </section>
 
   <section id="setupScreen" class="screen">
+    <div class="card">
+      <div>
+        <span class="pill">TOURNAMENT</span>
+        <h2 class="holeTitle">大会管理</h2>
+      </div>
+      <p class="small">
+        大会IDごとにFirebase保存先を分けます。例：2026_sumaida、2026_japan_pro。
+      </p>
+      <div class="tournamentBox">
+        <label>現在の大会ID</label>
+        <div class="tournamentCurrent" id="currentTournamentIdLabel"></div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <div class="selectBox">
+          <label>大会ID</label>
+          <input id="tournamentIdInput" placeholder="例：2026_sumaida">
+        </div>
+        <div class="selectBox">
+          <label>大会名（任意）</label>
+          <input id="tournamentNameInput" placeholder="例：2026すまいーだカップ">
+        </div>
+      </div>
+      <div class="utility">
+        <button class="blue" id="applyTournamentBtn">この大会に切替</button>
+        <button class="ghost" id="copyTournamentUrlBtn">大会URLをコピー</button>
+      </div>
+      <p class="small" id="tournamentUrlLabel" style="word-break:break-all;"></p>
+    </div>
+
     <div class="card">
       <div>
         <span class="pill">DATA SETUP</span>
@@ -1415,7 +1457,27 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
 const STORAGE_KEY = "golf_score_prototype_v12_2";
-const FIREBASE_TOURNAMENT_ID = "demo_tournament";
+const TOURNAMENT_ID_STORAGE_KEY = "golf_score_current_tournament_id";
+
+function sanitizeTournamentId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60) || "demo_tournament";
+}
+
+function getTournamentIdFromUrl() {
+  return new URLSearchParams(window.location.search).get("tournament");
+}
+
+let FIREBASE_TOURNAMENT_ID = sanitizeTournamentId(
+  getTournamentIdFromUrl() ||
+  localStorage.getItem(TOURNAMENT_ID_STORAGE_KEY) ||
+  "demo_tournament"
+);
 
 const firebaseConfig = {
   apiKey: "AIzaSyCcHuDIRU8w2bcZBuXLO4dr-vdKcygNdMc",
@@ -1433,6 +1495,7 @@ let firebaseReady = false;
 let applyingRemoteState = false;
 let remoteSaveTimer = null;
 let lastRemoteUpdatedAt = null;
+let firebaseUnsubscribe = null;
 
 
 const initialState = {
@@ -1518,8 +1581,15 @@ function applyFixedGroupFromUrl() {
   }
 }
 
+function tournamentUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("tournament", FIREBASE_TOURNAMENT_ID);
+  return url.toString();
+}
+
 function scorerUrlForGroup(groupId) {
   const url = new URL(window.location.href);
+  url.searchParams.set("tournament", FIREBASE_TOURNAMENT_ID);
   url.searchParams.set("group", groupId);
   return url.toString();
 }
@@ -1613,6 +1683,7 @@ function renderAllScreens() {
     renderRanking();
     renderNotices();
     renderStartControl();
+    renderTournamentManager();
     renderGroupUrls();
     renderDeviceGroupList();
     renderMonitor();
@@ -3461,6 +3532,62 @@ function renderRanking() {
 }
 
 
+
+function renderTournamentManager() {
+  const label = $("currentTournamentIdLabel");
+  const input = $("tournamentIdInput");
+  const nameInput = $("tournamentNameInput");
+  const urlLabel = $("tournamentUrlLabel");
+
+  if (label) label.textContent = FIREBASE_TOURNAMENT_ID;
+  if (input && !input.value.trim()) input.value = FIREBASE_TOURNAMENT_ID;
+  if (nameInput && state.tournamentName && !nameInput.value.trim()) nameInput.value = state.tournamentName;
+  if (urlLabel) urlLabel.textContent = tournamentUrl();
+}
+
+function switchTournament() {
+  const rawId = $("tournamentIdInput")?.value || "";
+  const nextId = sanitizeTournamentId(rawId);
+  const tournamentName = $("tournamentNameInput")?.value?.trim() || "";
+
+  if (!nextId) {
+    toast("大会IDを入力してください");
+    return;
+  }
+
+  if (!confirm(`大会ID「${nextId}」に切り替えますか？`)) return;
+
+  FIREBASE_TOURNAMENT_ID = nextId;
+  localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, nextId);
+
+  if (tournamentName) {
+    state.tournamentName = tournamentName;
+    saveState({ skipRemote: true });
+  }
+
+  if (firebaseDb) {
+    firebaseDocRef = firebaseDb.collection("tournaments").doc(FIREBASE_TOURNAMENT_ID);
+    firebaseReady = true;
+    setFirebaseStatus("大会切替：" + FIREBASE_TOURNAMENT_ID);
+    initFirebaseSync();
+  }
+
+  renderTournamentManager();
+  renderGroupQrList();
+  renderGroupUrls();
+  toast("大会を切り替えました");
+}
+
+async function copyTournamentUrl() {
+  const url = tournamentUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("大会URLをコピーしました");
+  } catch(e) {
+    toast("コピーできませんでした。URLを手動で選択してください");
+  }
+}
+
 function parCsvFromState() {
   return Array.from({length:18}, (_, i) => {
     const h = i + 1;
@@ -3530,6 +3657,7 @@ function switchTab(target) {
     $("setupTab").classList.add("active");
     $("setupScreen").classList.add("active");
     if (!$("csvInput").value.trim()) $("csvInput").value = SAMPLE_CSV;
+    renderTournamentManager();
     renderDeviceGroupList();
     renderGroupQrList();
     renderGroupUrls();
@@ -3630,6 +3758,9 @@ $("clearDeviceGroupBtn").onclick = () => {
     clearDeviceGroup();
   }
 };
+
+$("applyTournamentBtn").onclick = switchTournament;
+$("copyTournamentUrlBtn").onclick = copyTournamentUrl;
 
 $("applyParBtn").onclick = applyParInput;
 
