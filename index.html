@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.2</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.3</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -889,8 +889,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.2</h1>
-  <p>Firebase接続診断・同期対応</p>
+  <h1>スコアラー入力プロトタイプ v12.3</h1>
+  <p>Firebase自動同期対応</p>
 </header>
 
 <div class="wrap">
@@ -920,11 +920,11 @@
       </p>
       <div id="fixedGroupNotice" class="fixedNotice"></div>
       <div class="notice show" id="firebasePanel" style="background:#eef7ff;border-color:#93c5fd;color:#0b3b82;">
-        <strong>Firebase状態：</strong><span id="firebaseStatusText">未初期化</span>
-        <div class="utility">
-          <button class="blue" id="manualConnectBtn">Firebase接続テスト</button>
-          <button class="blue" id="manualPushBtn">Firebaseへ送信</button>
-          <button class="ghost" id="manualPullBtn">Firebaseから読込</button>
+        <strong>同期状態：</strong><span id="firebaseStatusText">確認中</span>
+        <div class="utility" id="firebaseDebugControls" style="display:none;">
+          <button class="blue" id="manualConnectBtn">再接続</button>
+          <button class="blue" id="manualPushBtn">手動送信</button>
+          <button class="ghost" id="manualPullBtn">手動読込</button>
           <button class="ghost" id="manualClearRemoteBtn">Firebase初期化</button>
         </div>
       </div>
@@ -1127,6 +1127,7 @@
         まずはCSV貼り付け方式です。Excelからコピーして貼り付けても運用できます。
         次段階でExcelファイル直接読み込みにできます。
       </p>
+      <button class="ghost" id="toggleFirebaseDebugBtn">Firebase診断ボタンを表示/非表示</button>
     </div>
 
     <div class="card">
@@ -1569,11 +1570,12 @@ function initFirebaseSync() {
     firebaseDocRef = firebaseDb.collection("tournaments").doc(FIREBASE_TOURNAMENT_ID);
     firebaseReady = true;
 
-    setFirebaseStatus("接続準備OK");
+    setFirebaseStatus("🟢 同期中");
 
     firebaseDocRef.onSnapshot(snapshot => {
       if (!snapshot.exists) {
-        setFirebaseStatus("Firebaseにデータなし。送信ボタンで初期作成してください");
+        setFirebaseStatus("初期データ作成中...");
+        saveRemoteStateNow(true);
         return;
       }
 
@@ -1594,7 +1596,7 @@ function initFirebaseSync() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAllScreens();
       applyingRemoteState = false;
-      setFirebaseStatus("受信完了 " + nowTimeLabel());
+      setFirebaseStatus("🟢 受信 " + nowTimeLabel());
     }, error => {
       console.error("Firestore受信エラー:", error);
       setFirebaseStatus("受信エラー：" + error.code);
@@ -1608,6 +1610,7 @@ function initFirebaseSync() {
 function scheduleRemoteSave() {
   if (!firebaseReady || !firebaseDocRef || applyingRemoteState) return;
   clearTimeout(remoteSaveTimer);
+  setFirebaseStatus("保存待機中...");
   remoteSaveTimer = setTimeout(() => saveRemoteStateNow(false), 500);
 }
 
@@ -1628,8 +1631,8 @@ function saveRemoteStateNow(isInitial = false) {
       updatedAt,
       source: isInitial ? "initial" : "client"
     }, { merge: true }).then(() => {
-      setFirebaseStatus("保存成功 " + nowTimeLabel());
-      toast("Firebaseへ保存しました");
+      setFirebaseStatus("🟢 同期済 " + nowTimeLabel());
+      /* auto sync: no toast */
     }).catch(error => {
       console.error("Firestore保存エラー:", error);
       setFirebaseStatus("保存エラー：" + error.code);
@@ -3647,6 +3650,10 @@ $("manualConnectBtn").onclick = initFirebaseSync;
 $("manualPushBtn").onclick = () => saveRemoteStateNow(false);
 $("manualPullBtn").onclick = pullRemoteStateNow;
 $("manualClearRemoteBtn").onclick = clearRemoteStateNow;
+$("toggleFirebaseDebugBtn").onclick = () => {
+  const panel = $("firebaseDebugControls");
+  if (panel) panel.style.display = panel.style.display === "none" ? "grid" : "none";
+};
 
 applyFixedGroupFromUrl();
 renderScorer();
