@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.1</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.2</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -889,8 +889,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.1</h1>
-  <p>Firebase診断・手動同期対応</p>
+  <h1>スコアラー入力プロトタイプ v12.2</h1>
+  <p>Firebase接続診断・同期対応</p>
 </header>
 
 <div class="wrap">
@@ -920,10 +920,12 @@
       </p>
       <div id="fixedGroupNotice" class="fixedNotice"></div>
       <div class="notice show" id="firebasePanel" style="background:#eef7ff;border-color:#93c5fd;color:#0b3b82;">
-        Firebase状態：<span id="firebaseStatusText">確認中</span>
+        <strong>Firebase状態：</strong><span id="firebaseStatusText">未初期化</span>
         <div class="utility">
-          <button class="blue" id="manualPushBtn">この端末のデータをFirebaseへ送信</button>
+          <button class="blue" id="manualConnectBtn">Firebase接続テスト</button>
+          <button class="blue" id="manualPushBtn">Firebaseへ送信</button>
           <button class="ghost" id="manualPullBtn">Firebaseから読込</button>
+          <button class="ghost" id="manualClearRemoteBtn">Firebase初期化</button>
         </div>
       </div>
       <div id="modeBanner" class="modeBanner test"></div>
@@ -1341,7 +1343,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
-const STORAGE_KEY = "golf_score_prototype_v12";
+const STORAGE_KEY = "golf_score_prototype_v12_2";
 const FIREBASE_TOURNAMENT_ID = "demo_tournament";
 
 const firebaseConfig = {
@@ -1418,32 +1420,7 @@ const initialState = {
 };
 
 let state = loadState();
-if (!state.notices) state.notices = [];
-if (!state.pace) state.pace = {};
-if (!state.timeLogs) state.timeLogs = [];
-if (!state.suspension) state.suspension = { totalMinutes: 0, activeStart: null };
-if (!state.publicFavorites) state.publicFavorites = [];
-if (!state.publicOpenPlayers) state.publicOpenPlayers = [];
-if (!state.monitorOpenPlayers) state.monitorOpenPlayers = [];
-if (!state.coursePar) {
-  state.coursePar = {
-    1:4, 2:4, 3:4, 4:3, 5:4, 6:5, 7:3, 8:5, 9:4,
-    10:3, 11:4, 12:4, 13:4, 14:4, 15:5, 16:3, 17:4, 18:5
-  };
-}
-if (!("deviceGroupId" in state)) state.deviceGroupId = null;
-if (!state.assignedDeviceGroupIds) state.assignedDeviceGroupIds = [];
-state.groups.forEach(g => {
-  if (!g.mode) g.mode = "test";
-  if (!("liveStartedAt" in g)) g.liveStartedAt = null;
-  if (!("liveStartDiff" in g)) g.liveStartDiff = null;
-  if (!g.plannedStart) g.plannedStart = "08:00";
-  if (!g.startHole) g.startHole = 1;
-  g.players.forEach(p => {
-    if (!p.testScores) p.testScores = {};
-    if (!p.testShots) p.testShots = {};
-  });
-});
+normalizeLoadedState();
 let pendingWithdrawPlayerId = null;
 let pendingRefereePlayerId = null;
 let pendingDeviceGroupId = null;
@@ -1488,117 +1465,41 @@ function saveState(options = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if (!options.skipRemote) scheduleRemoteSave();
 }
+function $(id) { return document.getElementById(id); }
+function currentGroup() {
+  return state.groups.find(g => g.id === Number(state.selectedGroupId));
+}
+function currentHoleKey() {
+  return "h" + state.selectedHole;
+}
+function isTestMode(group = currentGroup()) {
+  return group.mode !== "live";
+}
+function playerScores(player) {
+  return isTestMode() ? (player.testScores || {}) : (player.scores || {});
+}
+function playerShots(player, holeKey) {
+  const store = isTestMode() ? "testShots" : "shots";
+  if (!player[store]) player[store] = {};
+  if (!player[store][holeKey]) player[store][holeKey] = [];
+  return player[store][holeKey];
+}
+function playerScoresStore(player) {
+  const store = isTestMode() ? "testScores" : "scores";
+  if (!player[store]) player[store] = {};
+  return player[store];
+}
+function toast(message) {
+  const el = $("toast");
+  el.textContent = message;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2400);
+}
 
 function setFirebaseStatus(message) {
-  const el = $("firebaseStatus");
-  if (el) el.textContent = "Firebase：" + message;
-  const el2 = $("firebaseStatusText");
-  if (el2) el2.textContent = message;
-}
-
-function initFirebaseSync() {
-  try {
-    if (!window.firebase) {
-      setFirebaseStatus("SDK未読込");
-      return;
-    }
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-
-    firebaseDb = firebase.firestore();
-    firebaseDocRef = firebaseDb.collection("tournaments").doc(FIREBASE_TOURNAMENT_ID);
-
-    firebaseReady = true;
-    setFirebaseStatus("接続中");
-
-    firebaseDocRef.onSnapshot(snapshot => {
-      if (!snapshot.exists) {
-        setFirebaseStatus("Firebaseにデータなし。手動送信してください");
-        return;
-      }
-
-      const data = snapshot.data();
-      if (!data || !data.state) {
-        setFirebaseStatus("Firebaseデータ形式なし");
-        return;
-      }
-
-      if (lastRemoteUpdatedAt && data.updatedAt === lastRemoteUpdatedAt) return;
-
-      applyingRemoteState = true;
-      state = data.state;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      normalizeLoadedState();
-      renderAllScreens();
-      applyingRemoteState = false;
-      setFirebaseStatus("受信 " + nowTimeLabel());
-    }, error => {
-      console.error("Firestore snapshot error:", error);
-      setFirebaseStatus("受信エラー：" + error.code);
-    });
-  } catch (error) {
-    console.error("Firebase init error:", error);
-    setFirebaseStatus("初期化エラー：" + error.message);
-  }
-}
-
-function scheduleRemoteSave() {
-  if (!firebaseReady || !firebaseDocRef || applyingRemoteState) return;
-  clearTimeout(remoteSaveTimer);
-  remoteSaveTimer = setTimeout(() => saveRemoteStateNow(false), 350);
-}
-
-function saveRemoteStateNow(isInitial = false) {
-  if (!firebaseReady || !firebaseDocRef || applyingRemoteState) {
-    setFirebaseStatus("未接続のため送信不可");
-    return;
-  }
-  const updatedAt = new Date().toISOString();
-  lastRemoteUpdatedAt = updatedAt;
-
-  setFirebaseStatus("送信中");
-  firebaseDocRef.set({
-    state: JSON.parse(JSON.stringify(state)),
-    updatedAt,
-    source: isInitial ? "initial" : "client"
-  }, { merge: true }).then(() => {
-    setFirebaseStatus("保存済 " + nowTimeLabel());
-  }).catch(error => {
-    console.error("Firestore save error:", error);
-    setFirebaseStatus("保存エラー：" + error.code);
-  });
-}
-
-function pullRemoteStateNow() {
-  if (!firebaseReady || !firebaseDocRef) {
-    setFirebaseStatus("未接続のため読込不可");
-    return;
-  }
-  setFirebaseStatus("読込中");
-  firebaseDocRef.get().then(snapshot => {
-    if (!snapshot.exists) {
-      setFirebaseStatus("Firebaseにデータがありません");
-      return;
-    }
-    const data = snapshot.data();
-    if (!data || !data.state) {
-      setFirebaseStatus("Firebaseデータ形式なし");
-      return;
-    }
-    applyingRemoteState = true;
-    state = data.state;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    normalizeLoadedState();
-    
-$("manualPushBtn").onclick = () => saveRemoteStateNow(false);
-$("manualPullBtn").onclick = pullRemoteStateNow;
-
-renderAllScreens();
-    applyingRemoteState = false;
-    setFirebaseStatus("読込完了 " + nowTimeLabel());
-  }).catch(error => {
-    console.error("Firestore pull error:", error);
-    setFirebaseStatus("読込エラー：" + error.code);
-  });
+  const el = $("firebaseStatusText");
+  if (el) el.textContent = message;
+  console.log("Firebase状態:", message);
 }
 
 function normalizeLoadedState() {
@@ -1635,46 +1536,156 @@ function normalizeLoadedState() {
 }
 
 function renderAllScreens() {
-  applyFixedGroupFromUrl();
-  renderScorer();
-  renderRanking();
-  renderNotices();
-  renderStartControl();
-  renderGroupUrls();
-  renderDeviceGroupList();
-  renderMonitor();
-  renderPublicLeaderboard();
-  try { renderPaceStatus(); } catch (e) { console.error("renderPaceStatus error:", e); }
+  try {
+    applyFixedGroupFromUrl();
+    renderScorer();
+    renderRanking();
+    renderNotices();
+    renderStartControl();
+    renderGroupUrls();
+    renderDeviceGroupList();
+    renderMonitor();
+    renderPublicLeaderboard();
+    try { renderPaceStatus(); } catch (e) { console.error("renderPaceStatus error:", e); }
+  } catch (e) {
+    console.error("renderAllScreens error:", e);
+    setFirebaseStatus("画面更新エラー：" + e.message);
+  }
 }
-function $(id) { return document.getElementById(id); }
-function currentGroup() {
-  return state.groups.find(g => g.id === Number(state.selectedGroupId));
+
+function initFirebaseSync() {
+  try {
+    setFirebaseStatus("SDK確認中");
+    if (!window.firebase) {
+      setFirebaseStatus("SDK未読込。ネットワークまたは広告ブロックを確認");
+      return;
+    }
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+
+    firebaseDb = firebase.firestore();
+    firebaseDocRef = firebaseDb.collection("tournaments").doc(FIREBASE_TOURNAMENT_ID);
+    firebaseReady = true;
+
+    setFirebaseStatus("接続準備OK");
+
+    firebaseDocRef.onSnapshot(snapshot => {
+      if (!snapshot.exists) {
+        setFirebaseStatus("Firebaseにデータなし。送信ボタンで初期作成してください");
+        return;
+      }
+
+      const data = snapshot.data();
+      if (!data || !data.state) {
+        setFirebaseStatus("Firebaseデータ形式なし");
+        return;
+      }
+
+      if (lastRemoteUpdatedAt && data.updatedAt === lastRemoteUpdatedAt) {
+        setFirebaseStatus("自端末保存済 " + nowTimeLabel());
+        return;
+      }
+
+      applyingRemoteState = true;
+      state = data.state;
+      normalizeLoadedState();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderAllScreens();
+      applyingRemoteState = false;
+      setFirebaseStatus("受信完了 " + nowTimeLabel());
+    }, error => {
+      console.error("Firestore受信エラー:", error);
+      setFirebaseStatus("受信エラー：" + error.code);
+    });
+  } catch (error) {
+    console.error("Firebase初期化エラー:", error);
+    setFirebaseStatus("初期化エラー：" + error.message);
+  }
 }
-function currentHoleKey() {
-  return "h" + state.selectedHole;
+
+function scheduleRemoteSave() {
+  if (!firebaseReady || !firebaseDocRef || applyingRemoteState) return;
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(() => saveRemoteStateNow(false), 500);
 }
-function isTestMode(group = currentGroup()) {
-  return group.mode !== "live";
+
+function saveRemoteStateNow(isInitial = false) {
+  try {
+    if (!firebaseReady || !firebaseDocRef) {
+      setFirebaseStatus("未接続。先に接続テストを押してください");
+      return;
+    }
+    if (applyingRemoteState) return;
+
+    const updatedAt = new Date().toISOString();
+    lastRemoteUpdatedAt = updatedAt;
+    setFirebaseStatus("送信中...");
+
+    firebaseDocRef.set({
+      state: JSON.parse(JSON.stringify(state)),
+      updatedAt,
+      source: isInitial ? "initial" : "client"
+    }, { merge: true }).then(() => {
+      setFirebaseStatus("保存成功 " + nowTimeLabel());
+      toast("Firebaseへ保存しました");
+    }).catch(error => {
+      console.error("Firestore保存エラー:", error);
+      setFirebaseStatus("保存エラー：" + error.code);
+      toast("Firebase保存エラー：" + error.code);
+    });
+  } catch (error) {
+    console.error("保存処理エラー:", error);
+    setFirebaseStatus("保存処理エラー：" + error.message);
+  }
 }
-function playerScores(player) {
-  return isTestMode() ? (player.testScores || {}) : (player.scores || {});
+
+function pullRemoteStateNow() {
+  if (!firebaseReady || !firebaseDocRef) {
+    setFirebaseStatus("未接続。先に接続テストを押してください");
+    return;
+  }
+  setFirebaseStatus("読込中...");
+  firebaseDocRef.get().then(snapshot => {
+    if (!snapshot.exists) {
+      setFirebaseStatus("Firebaseにデータがありません");
+      return;
+    }
+    const data = snapshot.data();
+    if (!data || !data.state) {
+      setFirebaseStatus("Firebaseデータ形式なし");
+      return;
+    }
+
+    applyingRemoteState = true;
+    state = data.state;
+    normalizeLoadedState();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    renderAllScreens();
+    applyingRemoteState = false;
+    setFirebaseStatus("読込成功 " + nowTimeLabel());
+    toast("Firebaseから読み込みました");
+  }).catch(error => {
+    console.error("Firestore読込エラー:", error);
+    setFirebaseStatus("読込エラー：" + error.code);
+  });
 }
-function playerShots(player, holeKey) {
-  const store = isTestMode() ? "testShots" : "shots";
-  if (!player[store]) player[store] = {};
-  if (!player[store][holeKey]) player[store][holeKey] = [];
-  return player[store][holeKey];
-}
-function playerScoresStore(player) {
-  const store = isTestMode() ? "testScores" : "scores";
-  if (!player[store]) player[store] = {};
-  return player[store];
-}
-function toast(message) {
-  const el = $("toast");
-  el.textContent = message;
-  el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 2400);
+
+function clearRemoteStateNow() {
+  if (!firebaseReady || !firebaseDocRef) {
+    setFirebaseStatus("未接続。先に接続テストを押してください");
+    return;
+  }
+  if (!confirm("Firebase上の大会データを初期化しますか？")) return;
+  setFirebaseStatus("初期化中...");
+  firebaseDocRef.delete().then(() => {
+    setFirebaseStatus("Firebase初期化完了");
+    toast("Firebaseを初期化しました");
+  }).catch(error => {
+    console.error("Firestore初期化エラー:", error);
+    setFirebaseStatus("初期化エラー：" + error.code);
+  });
 }
 
 function nowTimeLabel() {
@@ -3632,6 +3643,11 @@ $("resetBtn").onclick = () => {
   }
 };
 
+$("manualConnectBtn").onclick = initFirebaseSync;
+$("manualPushBtn").onclick = () => saveRemoteStateNow(false);
+$("manualPullBtn").onclick = pullRemoteStateNow;
+$("manualClearRemoteBtn").onclick = clearRemoteStateNow;
+
 applyFixedGroupFromUrl();
 renderScorer();
 renderRanking();
@@ -3639,6 +3655,7 @@ renderNotices();
 renderGroupUrls();
 renderStartControl();
 try { renderPaceStatus(); } catch (e) { console.error("initial renderPaceStatus error:", e); }
+initFirebaseSync();
 setInterval(() => {
   if ($("publicScreen")?.classList.contains("active")) renderPublicLeaderboard();
 }, 30000);
