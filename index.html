@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9.1</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9.2</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,8 +942,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.9.1</h1>
-  <p>スコアラーUI・Firebase再接続修正版</p>
+  <h1>スコアラー入力プロトタイプ v12.9.2</h1>
+  <p>QR固定3タブ表示修正版</p>
 </header>
 
 <div class="wrap">
@@ -3198,11 +3198,34 @@ function bindPublicLeaderboardButtons() {
 
 
 function isScorerMode() {
-  return isGroupFixed();
+  const params = new URLSearchParams(window.location.search);
+  const urlGroup = params.get("group");
+  return !!urlGroup || !!state.deviceGroupId;
 }
 
 function applyUiMode() {
-  document.body.classList.toggle("scorer-mode", isScorerMode());
+  const scorerMode = isScorerMode();
+  document.body.classList.toggle("scorer-mode", scorerMode);
+
+  // QR/URL固定時は本部系タブを強制非表示、スコアラー3タブを強制表示
+  ["leaderboardTab","monitorTab","publicTab","setupTab"].forEach(id => {
+    const el = $(id);
+    if (el) el.style.display = scorerMode ? "none" : "";
+  });
+  ["scorerHbhTab","scorerRankingTab"].forEach(id => {
+    const el = $(id);
+    if (el) el.style.display = scorerMode ? "block" : "none";
+  });
+
+  if (scorerMode) {
+    const activeIsHq = ["leaderboardScreen","monitorScreen","publicScreen","setupScreen"]
+      .some(id => $(id)?.classList.contains("active"));
+    const noScorerActive = !["scorerScreen","scorerHbhScreen","scorerRankingScreen"]
+      .some(id => $(id)?.classList.contains("active"));
+    if (activeIsHq || noScorerActive) {
+      switchTab("scorer");
+    }
+  }
 }
 
 function scorerGroupPlayerIds() {
@@ -3800,6 +3823,9 @@ function applyParInput() {
 }
 
 function switchTab(target) {
+  if (isScorerMode() && ["leaderboard","monitor","public","setup"].includes(target)) {
+    target = "scorer";
+  }
   ["scorerTab","scorerHbhTab","scorerRankingTab","leaderboardTab","monitorTab","publicTab","setupTab"].forEach(id => {
     const el = $(id);
     if (el) el.classList.remove("active");
@@ -4122,6 +4148,18 @@ initFirebaseSync();
 setInterval(() => {
   if ($("publicScreen")?.classList.contains("active")) renderPublicLeaderboard();
 }, 30000);
+
+setTimeout(() => {
+  try {
+    applyFixedGroupFromUrl();
+    applyUiMode();
+    renderScorer();
+    renderScorerHbh();
+    renderScorerRanking();
+  } catch(e) {
+    console.error("force scorer mode error:", e);
+  }
+}, 300);
 </script>
 </body>
 </html>
