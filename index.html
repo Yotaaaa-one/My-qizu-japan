@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v12.9.1</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,8 +942,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v12.9</h1>
-  <p>スコアラーUI完成版</p>
+  <h1>スコアラー入力プロトタイプ v12.9.1</h1>
+  <p>スコアラーUI・Firebase再接続修正版</p>
 </header>
 
 <div class="wrap">
@@ -1702,26 +1702,32 @@ function normalizeLoadedState() {
   }
 }
 
-function renderAllScreens() {
+
+function safeCall(fn, label) {
   try {
-    applyFixedGroupFromUrl();
-    applyUiMode();
-    renderScorer();
-    renderScorerHbh();
-    renderScorerRanking();
-    renderRanking();
-    renderNotices();
-    renderStartControl();
-    renderTournamentManager();
-    renderGroupUrls();
-    renderDeviceGroupList();
-    renderMonitor();
-    renderPublicLeaderboard();
-    try { renderPaceStatus(); } catch (e) { console.error("renderPaceStatus error:", e); }
+    if (typeof fn === "function") fn();
   } catch (e) {
-    console.error("renderAllScreens error:", e);
-    setFirebaseStatus("画面更新エラー：" + e.message);
+    console.error(label + " error:", e);
+    if (typeof setFirebaseStatus === "function") setFirebaseStatus(label + "エラー：" + e.message);
   }
+}
+
+function renderAllScreens() {
+  safeCall(applyFixedGroupFromUrl, "担当組固定");
+  safeCall(applyUiMode, "UIモード");
+  safeCall(renderScorer, "スコアラー画面");
+  safeCall(renderScorerHbh, "ホールバイホール");
+  safeCall(renderScorerRanking, "スコアラーランキング");
+  safeCall(renderRanking, "本部ランキング");
+  safeCall(renderNotices, "本部連絡");
+  safeCall(renderStartControl, "スタート管理");
+  safeCall(renderTournamentManager, "大会管理");
+  safeCall(renderGroupUrls, "URL一覧");
+  safeCall(renderGroupQrList, "QR一覧");
+  safeCall(renderDeviceGroupList, "端末設定");
+  safeCall(renderMonitor, "本部モニター");
+  safeCall(renderPublicLeaderboard, "一般モニター");
+  safeCall(renderPaceStatus, "進行状況");
 }
 
 function initFirebaseSync() {
