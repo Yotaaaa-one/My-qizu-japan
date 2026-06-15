@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v14.1 実戦強化版</title>
+  <title>ゴルフトーナメント スコアラー入力システム v14.1 実戦強化・音声通知版</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -4933,6 +4933,183 @@ function v141StartPublicAutoScroll() {
     panel.scrollTop = bottom ? 0 : panel.scrollTop + Math.max(80, Math.floor(panel.clientHeight * 0.7));
   }, 6500);
 }
+
+
+/* =========================
+   v14.1 本部音声読み上げ 追加
+   全通知共通：ピンポーン + 日本語読み上げ
+========================= */
+let v141VoiceQueue = [];
+let v141VoiceSpeaking = false;
+let v141VoiceInitialized = false;
+let v141SpokenNoticeIds = new Set();
+
+function v141ExtendVoiceSettings() {
+  v141Normalize();
+  if (!('voiceRead' in state.v141Settings)) state.v141Settings.voiceRead = true;
+  if (!('voicePlayerName' in state.v141Settings)) state.v141Settings.voicePlayerName = true;
+}
+v141ExtendVoiceSettings();
+
+const v141VoiceOriginalNormalizeLoadedState = normalizeLoadedState;
+normalizeLoadedState = function() {
+  v141VoiceOriginalNormalizeLoadedState();
+  v141ExtendVoiceSettings();
+};
+
+function v141IsHqVoiceTerminal() {
+  if (isScorerMode()) return false;
+  return ['leaderboardScreen','monitorScreen','setupScreen'].some(id => $(id)?.classList.contains('active'));
+}
+
+function v141Beep(kind = 'notice') {
+  try {
+    v141ExtendVoiceSettings();
+    if (!state.v141Settings.alertSound || !v141AudioEnabled) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    function tone(freq, start, duration) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.20, ctx.currentTime + start + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + duration + 0.02);
+    }
+
+    // 全通知共通の「ピンポーン」風、2音チャイム
+    tone(784, 0.00, 0.22);
+    tone(988, 0.26, 0.34);
+    setTimeout(() => ctx.close?.(), 900);
+  } catch(e) {}
+}
+
+function v141NoticeSpeechText(notice) {
+  if (!notice) return '';
+  const hole = Number(notice.hole || state.selectedHole || 0);
+  const holeText = hole ? `${hole}番ホール` : 'ホール未確認';
+  const type = String(notice.type || '');
+  const playerName = String(notice.playerName || '').trim();
+  const includePlayer = state.v141Settings?.voicePlayerName && playerName;
+
+  if (type.includes('競技委員')) {
+    return `競技委員要請。${holeText}。競技委員要請。${holeText}。`;
+  }
+  if (type.includes('棄権')) {
+    return includePlayer ? `棄権連絡。${holeText}。${playerName}選手。` : `棄権連絡。${holeText}。`;
+  }
+  if (type.includes('本部')) {
+    return `本部連絡。${holeText}。`;
+  }
+  return `本部通知。${holeText}。`;
+}
+
+function v141Speak(text, onEnd) {
+  try {
+    if (!window.speechSynthesis || !text) {
+      if (onEnd) onEnd();
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ja-JP';
+    utter.rate = 0.95;
+    utter.pitch = 1.0;
+    utter.volume = 1.0;
+    utter.onend = () => { if (onEnd) onEnd(); };
+    utter.onerror = () => { if (onEnd) onEnd(); };
+    window.speechSynthesis.speak(utter);
+  } catch(e) {
+    if (onEnd) onEnd();
+  }
+}
+
+function v141ProcessVoiceQueue() {
+  if (v141VoiceSpeaking) return;
+  const notice = v141VoiceQueue.shift();
+  if (!notice) return;
+  v141VoiceSpeaking = true;
+  v141Beep('notice');
+  setTimeout(() => {
+    v141Speak(v141NoticeSpeechText(notice), () => {
+      v141VoiceSpeaking = false;
+      setTimeout(v141ProcessVoiceQueue, 250);
+    });
+  }, 760);
+}
+
+function v141QueueNoticeSpeech(notice) {
+  v141ExtendVoiceSettings();
+  if (!state.v141Settings.voiceRead || !v141AudioEnabled || !v141IsHqVoiceTerminal()) return;
+  if (!notice || notice.status === '完了' || !notice.id || v141SpokenNoticeIds.has(notice.id)) return;
+  v141SpokenNoticeIds.add(notice.id);
+  v141VoiceQueue.push(notice);
+  v141ProcessVoiceQueue();
+}
+
+function v141ScanNewNoticesForVoice() {
+  const notices = state.notices || [];
+  if (!v141VoiceInitialized) {
+    notices.forEach(n => { if (n.id) v141SpokenNoticeIds.add(n.id); });
+    v141VoiceInitialized = true;
+    return;
+  }
+  notices
+    .filter(n => n.status !== '完了')
+    .slice(0, 10)
+    .reverse()
+    .forEach(v141QueueNoticeSpeech);
+}
+
+const v141VoiceOriginalRenderNotices = renderNotices;
+renderNotices = function() {
+  v141VoiceOriginalRenderNotices();
+  v141ScanNewNoticesForVoice();
+};
+
+const v141VoiceOriginalOperationPanelHtml = v14OperationPanelHtml;
+v14OperationPanelHtml = function(compact = false) {
+  v141ExtendVoiceSettings();
+  const base = v141VoiceOriginalOperationPanelHtml(compact);
+  const s = state.v141Settings;
+  const extra = `
+    <div class="v14OpsGrid">
+      <div class="v14OpsBox ${s.voiceRead ? 'v14Ok' : 'v14Warn'}">音声読み上げ<strong>${s.voiceRead ? 'ON' : 'OFF'}</strong></div>
+      <div class="v14OpsBox ${s.voicePlayerName ? 'v14Ok' : 'v14Warn'}">選手名読み上げ<strong>${s.voicePlayerName ? 'ON' : 'OFF'}</strong></div>
+    </div>
+    ${compact ? '' : `
+      <div class="v14Toolbar">
+        <button class="ghost" id="v141ToggleVoiceBtn">音声読み上げ 切替</button>
+        <button class="ghost" id="v141ToggleVoicePlayerBtn">選手名読み上げ 切替</button>
+        <button class="blue" id="v141VoiceTestBtn">読み上げテスト</button>
+      </div>
+      <p class="small">通知音は全通知共通でピンポーンです。競技委員要請は「競技委員要請、○番ホール」を2回読み上げます。</p>
+    `}
+  `;
+  return base + extra;
+};
+
+const v141VoiceOriginalRenderV14OperationPanel = renderV14OperationPanel;
+renderV14OperationPanel = function() {
+  v141VoiceOriginalRenderV14OperationPanel();
+  const voice = $('v141ToggleVoiceBtn');
+  if (voice) voice.onclick = () => { v141EnableAudio(); v141ExtendVoiceSettings(); state.v141Settings.voiceRead = !state.v141Settings.voiceRead; saveState(); renderV14OperationPanel(); };
+  const player = $('v141ToggleVoicePlayerBtn');
+  if (player) player.onclick = () => { v141ExtendVoiceSettings(); state.v141Settings.voicePlayerName = !state.v141Settings.voicePlayerName; saveState(); renderV14OperationPanel(); };
+  const test = $('v141VoiceTestBtn');
+  if (test) test.onclick = () => {
+    v141EnableAudio();
+    v141Beep('notice');
+    setTimeout(() => v141Speak('本部システム音声確認です。'), 760);
+    toast('読み上げテストを再生しました');
+  };
+};
 
 window.addEventListener('online', () => { toast('オンラインに復帰しました'); if (firebaseReady) saveRemoteStateNow(false); });
 window.addEventListener('offline', () => { toast('オフラインです。入力は端末内に保存されます'); });
