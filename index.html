@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13.4</title>
+  <title>ゴルフトーナメント スコアラー入力システム v14 実戦運用版</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -45,7 +45,7 @@
     }
     .tabs {
       display:grid;
-      grid-template-columns:repeat(5,1fr);
+      grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
       gap:8px;
       margin-bottom:12px;
     }
@@ -938,12 +938,74 @@
       font-size:12px;
       line-height:1.6;
     }
+
+
+    /* v14 実戦運用版 */
+    body.scorer-mode .tabs { grid-template-columns:repeat(3,1fr); }
+    @media (max-width:640px) {
+      .wrap { padding:10px; }
+      header { padding:14px 12px; }
+      header h1 { font-size:17px; }
+      .tabs { gap:6px; position:sticky; top:70px; z-index:9; background:rgba(243,247,244,.92); backdrop-filter:blur(8px); padding:6px 0; }
+      .tab { padding:10px 8px; font-size:13px; border-radius:12px; }
+      .card, .publicBoard { border-radius:18px; padding:12px; }
+      .actions { grid-template-columns:repeat(2,1fr); }
+      .cup { grid-column:auto; }
+      .playerHead { align-items:flex-start; }
+      .name { font-size:17px; }
+      .shot { min-height:52px; }
+    }
+    .v14OpsGrid {
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+      margin:12px 0;
+    }
+    @media (min-width:760px) {
+      .v14OpsGrid { grid-template-columns:repeat(4,1fr); }
+    }
+    .v14OpsBox {
+      border:1px solid #e2e8f0;
+      background:#f8fafc;
+      border-radius:16px;
+      padding:10px;
+      text-align:center;
+      font-weight:900;
+    }
+    .v14OpsBox strong { display:block; font-size:24px; margin-top:2px; }
+    .v14Ok { background:#ecfdf3; border-color:#86efac; color:#14532d; }
+    .v14Warn { background:#fff7ed; border-color:#fdba74; color:#9a3412; }
+    .v14Bad { background:#fef3f2; border-color:#fda29b; color:#b42318; }
+    .v14Toolbar {
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+      margin-top:10px;
+    }
+    @media (min-width:760px) {
+      .v14Toolbar { grid-template-columns:repeat(4,1fr); }
+    }
+    .v14HiddenInput { display:none; }
+    .v14MiniList { margin:10px 0 0; padding-left:18px; color:#475467; line-height:1.7; font-size:13px; }
+    .v14LiveGuard {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:#dcfce7;
+      color:#14532d;
+      font-weight:900;
+      border:1px solid #86efac;
+      margin-top:8px;
+      font-size:12px;
+    }
   </style>
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v13.4</h1>
-  <p>スコアラーランキング・HBHスマホ最適化版</p>
+  <h1>スコアラー入力システム v14</h1>
+  <p>実戦運用版：同期・確認・バックアップ強化</p>
 </header>
 
 <div class="wrap">
@@ -4361,6 +4423,207 @@ $("toggleFirebaseDebugBtn").onclick = () => {
   const panel = $("firebaseDebugControls");
   if (panel) panel.style.display = panel.style.display === "none" ? "grid" : "none";
 };
+
+
+
+/* =========================
+   v14 実戦運用版 追加機能
+========================= */
+const V14_VERSION = "v14.0";
+let v14LastLocalSaveAt = null;
+
+function v14DownloadText(filename, text, mime = "text/plain") {
+  const blob = new Blob([text], { type: mime + ";charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function v14DateStamp() {
+  const d = new Date();
+  return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+}
+
+function v14EscapeCsv(value) {
+  const s = String(value ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function v14ExportBackup() {
+  const payload = {
+    version: V14_VERSION,
+    exportedAt: new Date().toISOString(),
+    tournamentId: FIREBASE_TOURNAMENT_ID,
+    state
+  };
+  v14DownloadText(`pga_score_backup_${FIREBASE_TOURNAMENT_ID}_${v14DateStamp()}.json`, JSON.stringify(payload, null, 2), "application/json");
+  toast("バックアップJSONを出力しました");
+}
+
+function v14ExportRankingCsv() {
+  const rows = getRankingRows()
+    .sort((a,b) => {
+      if (a.status === "withdrawn" && b.status !== "withdrawn") return 1;
+      if (a.status !== "withdrawn" && b.status === "withdrawn") return -1;
+      const diff = playerScoreToPar(a.player) - playerScoreToPar(b.player);
+      if (diff !== 0) return diff;
+      return b.holes - a.holes || totalScore(a.player) - totalScore(b.player) || a.player.name.localeCompare(b.player.name, "ja");
+    });
+  const header = ["順位","選手名","組","SCORE","THRU","TOTAL","状態"];
+  const lines = [header.map(v14EscapeCsv).join(",")];
+  rows.forEach((r, i) => {
+    const status = r.status === "withdrawn" ? "棄権" : (r.status || "active");
+    const rank = r.status === "withdrawn" ? "" : String(i + 1);
+    lines.push([rank, r.player.name, r.group, publicTotalLabel(r.player, r.status), `${r.holes}H`, r.status === "withdrawn" ? "WD" : totalScore(r.player), status].map(v14EscapeCsv).join(","));
+  });
+  v14DownloadText(`pga_score_ranking_${FIREBASE_TOURNAMENT_ID}_${v14DateStamp()}.csv`, "\ufeff" + lines.join("\n"), "text/csv");
+  toast("順位表CSVを出力しました");
+}
+
+function v14ImportBackupFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const json = JSON.parse(reader.result);
+      const importedState = json.state || json;
+      if (!importedState.groups || !Array.isArray(importedState.groups)) throw new Error("groups が見つかりません");
+      if (!confirm("バックアップから大会データを復元しますか？現在のローカルデータは上書きされます。")) return;
+      state = importedState;
+      normalizeLoadedState();
+      saveState();
+      renderAllScreens();
+      toast("バックアップを復元しました");
+    } catch (e) {
+      alert("バックアップ読込に失敗しました：" + e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function v14OperationStats() {
+  const groups = state.groups || [];
+  const liveGroups = groups.filter(g => g.mode === "live").length;
+  const testGroups = Math.max(0, groups.length - liveGroups);
+  const notices = state.notices || [];
+  const pending = notices.filter(n => n.status !== "完了").length;
+  const assigned = (state.assignedDeviceGroupIds || []).length;
+  const online = navigator.onLine !== false;
+  return { groups, liveGroups, testGroups, pending, assigned, online };
+}
+
+function v14StatusClass(ok, warn) {
+  if (ok) return "v14Ok";
+  if (warn) return "v14Warn";
+  return "v14Bad";
+}
+
+function v14OperationPanelHtml(compact = false) {
+  const s = v14OperationStats();
+  const syncText = firebaseReady ? "同期中" : "未接続";
+  const saveText = v14LastLocalSaveAt || "未保存";
+  const warnings = [];
+  if (!s.groups.length) warnings.push("大会データが未読込です。");
+  if (s.testGroups) warnings.push(`${s.testGroups}組がテストモードです。`);
+  if (s.assigned < s.groups.length) warnings.push(`端末未設定が${s.groups.length - s.assigned}組あります。`);
+  if (s.pending) warnings.push(`未完了の本部連絡が${s.pending}件あります。`);
+  if (!s.online) warnings.push("端末がオフラインです。");
+  if (!firebaseReady) warnings.push("Firebase同期が未接続です。必要に応じて再接続してください。");
+
+  return `
+    <div class="v14OpsGrid">
+      <div class="v14OpsBox ${v14StatusClass(s.online, false)}">通信<strong>${s.online ? "ON" : "OFF"}</strong></div>
+      <div class="v14OpsBox ${v14StatusClass(firebaseReady, true)}">Firebase<strong>${syncText}</strong></div>
+      <div class="v14OpsBox ${v14StatusClass(s.testGroups === 0 && s.groups.length > 0, s.testGroups > 0)}">本番組<strong>${s.liveGroups}/${s.groups.length}</strong></div>
+      <div class="v14OpsBox ${v14StatusClass(s.pending === 0, s.pending > 0)}">未完了連絡<strong>${s.pending}</strong></div>
+    </div>
+    ${compact ? "" : `<p class="small">最終ローカル保存：${saveText}</p>`}
+    ${warnings.length ? `<ul class="v14MiniList">${warnings.map(w => `<li>${w}</li>`).join("")}</ul>` : `<p class="small">実戦チェックは良好です。フェアウェイに朝露、システムには青信号です。</p>`}
+  `;
+}
+
+function v14EnsureOperationPanel() {
+  const setup = $("setupScreen");
+  if (setup && !$("v14OpsPanel")) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = "v14OpsPanel";
+    card.innerHTML = `
+      <div class="between">
+        <div>
+          <span class="pill">v14 LIVE OPS</span>
+          <h2 class="holeTitle">実戦前チェック</h2>
+        </div>
+        <span class="v14LiveGuard">${V14_VERSION}</span>
+      </div>
+      <div id="v14OpsBody"></div>
+      <div class="v14Toolbar">
+        <button class="blue" id="v14BackupBtn">バックアップ出力</button>
+        <button class="ghost" id="v14ImportBtn">バックアップ読込</button>
+        <button class="orange" id="v14RankingCsvBtn">順位表CSV出力</button>
+        <button class="ghost" id="v14RefreshBtn">再チェック</button>
+      </div>
+      <input class="v14HiddenInput" id="v14ImportFile" type="file" accept=".json,application/json">
+    `;
+    setup.insertBefore(card, setup.firstElementChild);
+  }
+  const monitor = $("monitorScreen");
+  if (monitor && !$("v14MonitorOps")) {
+    const card = document.createElement("div");
+    card.className = "monitorCard";
+    card.id = "v14MonitorOps";
+    card.style.marginBottom = "14px";
+    card.innerHTML = `<h3>実戦運用チェック</h3><div id="v14MonitorOpsBody"></div>`;
+    monitor.insertBefore(card, monitor.children[1] || null);
+  }
+}
+
+function renderV14OperationPanel() {
+  v14EnsureOperationPanel();
+  const body = $("v14OpsBody");
+  if (body) body.innerHTML = v14OperationPanelHtml(false);
+  const monitorBody = $("v14MonitorOpsBody");
+  if (monitorBody) monitorBody.innerHTML = v14OperationPanelHtml(true);
+  const backup = $("v14BackupBtn");
+  if (backup) backup.onclick = v14ExportBackup;
+  const ranking = $("v14RankingCsvBtn");
+  if (ranking) ranking.onclick = v14ExportRankingCsv;
+  const refresh = $("v14RefreshBtn");
+  if (refresh) refresh.onclick = () => { renderV14OperationPanel(); toast("実戦チェックを更新しました"); };
+  const importBtn = $("v14ImportBtn");
+  const importFile = $("v14ImportFile");
+  if (importBtn && importFile) {
+    importBtn.onclick = () => importFile.click();
+    importFile.onchange = e => v14ImportBackupFile(e.target.files?.[0]);
+  }
+}
+
+const v14OriginalSaveState = saveState;
+saveState = function(options = {}) {
+  v14LastLocalSaveAt = nowTimeLabel();
+  v14OriginalSaveState(options);
+  setTimeout(renderV14OperationPanel, 0);
+};
+
+const v14OriginalRenderAllScreens = renderAllScreens;
+renderAllScreens = function() {
+  v14OriginalRenderAllScreens();
+  renderV14OperationPanel();
+};
+
+window.addEventListener("online", renderV14OperationPanel);
+window.addEventListener("offline", renderV14OperationPanel);
+window.addEventListener("beforeunload", e => {
+  if (remoteSaveTimer) {
+    e.preventDefault();
+    e.returnValue = "保存待機中のデータがあります。";
+  }
+});
 
 applyFixedGroupFromUrl();
 applyUiMode();
