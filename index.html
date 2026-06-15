@@ -4936,8 +4936,8 @@ function v141StartPublicAutoScroll() {
 
 
 /* =========================
-   v14.1 本部音声読み上げ 追加
-   全通知共通：ピンポーン + 日本語読み上げ
+   v14.2 本部音声読み上げ 追加
+   全通知共通：ピンポーン + 組番号入り日本語読み上げ
 ========================= */
 let v141VoiceQueue = [];
 let v141VoiceSpeaking = false;
@@ -4995,20 +4995,25 @@ function v141NoticeSpeechText(notice) {
   if (!notice) return '';
   const hole = Number(notice.hole || state.selectedHole || 0);
   const holeText = hole ? `${hole}番ホール` : 'ホール未確認';
+  const rawGroupName = String(notice.groupName || '').trim();
+  let groupText = rawGroupName;
+  if (!groupText && notice.groupId) groupText = `第${notice.groupId}組`;
+  if (!groupText && currentGroup()) groupText = currentGroup().name || '';
+  groupText = groupText || '組未確認';
   const type = String(notice.type || '');
   const playerName = String(notice.playerName || '').trim();
   const includePlayer = state.v141Settings?.voicePlayerName && playerName;
 
   if (type.includes('競技委員')) {
-    return `競技委員要請。${holeText}。競技委員要請。${holeText}。`;
+    return `競技委員要請。${groupText}。${holeText}。競技委員要請。${groupText}。${holeText}。`;
   }
   if (type.includes('棄権')) {
-    return includePlayer ? `棄権連絡。${holeText}。${playerName}選手。` : `棄権連絡。${holeText}。`;
+    return includePlayer ? `棄権連絡。${groupText}。${holeText}。${playerName}選手。` : `棄権連絡。${groupText}。${holeText}。`;
   }
   if (type.includes('本部')) {
-    return `本部連絡。${holeText}。`;
+    return `本部連絡。${groupText}。${holeText}。`;
   }
-  return `本部通知。${holeText}。`;
+  return `本部通知。${groupText}。${holeText}。`;
 }
 
 function v141Speak(text, onEnd) {
@@ -5089,7 +5094,7 @@ v14OperationPanelHtml = function(compact = false) {
         <button class="ghost" id="v141ToggleVoicePlayerBtn">選手名読み上げ 切替</button>
         <button class="blue" id="v141VoiceTestBtn">読み上げテスト</button>
       </div>
-      <p class="small">通知音は全通知共通でピンポーンです。競技委員要請は「競技委員要請、○番ホール」を2回読み上げます。</p>
+      <p class="small">通知音は全通知共通でピンポーンです。競技委員要請は「競技委員要請、○組、○番ホール」を2回読み上げます。</p>
     `}
   `;
   return base + extra;
@@ -5106,10 +5111,17 @@ renderV14OperationPanel = function() {
   if (test) test.onclick = () => {
     v141EnableAudio();
     v141Beep('notice');
-    setTimeout(() => v141Speak('本部システム音声確認です。'), 760);
+    setTimeout(() => v141Speak('本部システム音声確認です。競技委員要請。第1組。7番ホール。'), 760);
     toast('読み上げテストを再生しました');
   };
 };
+
+
+/* v14.2 changelog
+   - 音声読み上げに組番号を追加
+   - 競技委員要請：競技委員要請。第○組。○番ホール。を2回
+   - 棄権連絡・本部連絡にも組番号を追加
+*/
 
 window.addEventListener('online', () => { toast('オンラインに復帰しました'); if (firebaseReady) saveRemoteStateNow(false); });
 window.addEventListener('offline', () => { toast('オフラインです。入力は端末内に保存されます'); });
