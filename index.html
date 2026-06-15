@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13.1</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,7 +942,7 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v13</h1>
+  <h1>スコアラー入力プロトタイプ v13.1</h1>
   <p>スコアラーランキング・HBHスマホ最適化版</p>
 </header>
 
@@ -3268,29 +3268,56 @@ function renderScorerHbh() {
   const player = players.find(p => p.id === activeScorerHbhPlayerId) || players[0];
   const outHoles = [1,2,3,4,5,6,7,8,9];
   const inHoles = [10,11,12,13,14,15,16,17,18];
-  const allHoles = [...outHoles, ...inHoles];
 
-  const outTotal = hbhSubtotal(player, outHoles);
-  const inTotal = hbhSubtotal(player, inHoles);
-  const outPar = hbhParTotal(outHoles);
-  const inPar = hbhParTotal(inHoles);
-  const outToPar = hbhToPar(player, outHoles);
-  const inToPar = hbhToPar(player, inHoles);
+  const makeSection = (title, holes, totalLabel) => {
+    const sectionScore = hbhSubtotal(player, holes);
+    const sectionPar = hbhParTotal(holes);
+    const sectionToPar = hbhToPar(player, holes);
+
+    const scoreCells = holes.map(h => {
+      const rawScore = player.scores?.["h" + h];
+      const score = rawScore ?? "-";
+      const diff = rawScore == null ? null : Number(rawScore) - getParForHole(h);
+      return `<td class="v13ScoreCell ${rawScore == null ? "" : "played"} ${diff == null ? "" : parDiffClass(diff)}" data-v13-hole="${h}" data-v13-player="${player.id}">${score}</td>`;
+    }).join("");
+
+    const diffCells = holes.map(h => {
+      const rawScore = player.scores?.["h" + h];
+      const diff = rawScore == null ? null : Number(rawScore) - getParForHole(h);
+      return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
+    }).join("");
+
+    return `
+      <div class="v13NineTitle">${title}</div>
+      <div class="v13HbhScroll">
+        <table class="v13HbhTable">
+          <tr>
+            <th>HOLE</th>
+            ${holes.map(h => `<th>${h}</th>`).join("")}
+            <th class="v13TotalCell">${totalLabel}</th>
+          </tr>
+          <tr>
+            <td>PAR</td>
+            ${holes.map(h => `<td>${getParForHole(h)}</td>`).join("")}
+            <td class="v13TotalCell">${sectionPar}</td>
+          </tr>
+          <tr>
+            <td>SCORE</td>
+            ${scoreCells}
+            <td class="v13TotalCell">${sectionScore}</td>
+          </tr>
+          <tr>
+            <td>±</td>
+            ${diffCells}
+            <td class="v13TotalCell">${sectionToPar}</td>
+          </tr>
+        </table>
+      </div>
+    `;
+  };
+
   const totalStrokes = totalScore(player);
   const totalToPar = parDiffLabel(playerScoreToPar(player));
-
-  const scoreCells = allHoles.map(h => {
-    const rawScore = player.scores?.["h" + h];
-    const score = rawScore ?? "-";
-    const diff = rawScore == null ? null : Number(rawScore) - getParForHole(h);
-    return `<td class="v13ScoreCell ${rawScore == null ? "" : "played"} ${diff == null ? "" : parDiffClass(diff)}" data-v13-hole="${h}" data-v13-player="${player.id}">${score}</td>`;
-  }).join("");
-
-  const diffCells = allHoles.map(h => {
-    const rawScore = player.scores?.["h" + h];
-    const diff = rawScore == null ? null : Number(rawScore) - getParForHole(h);
-    return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
-  }).join("");
 
   el.innerHTML = `
     <div class="v13PlayerTabs">
@@ -3316,38 +3343,8 @@ function renderScorerHbh() {
         <div class="v13SummaryBox">TOTAL<strong>${totalStrokes}</strong></div>
       </div>
 
-      <div class="v13HbhScroll">
-        <table class="v13HbhTable">
-          <tr>
-            <th>HOLE</th>
-            ${allHoles.map(h => `<th>${h}</th>`).join("")}
-            <th class="v13TotalCell">OUT</th>
-            <th class="v13TotalCell">IN</th>
-            <th class="v13TotalCell">TOTAL</th>
-          </tr>
-          <tr>
-            <td>PAR</td>
-            ${allHoles.map(h => `<td>${getParForHole(h)}</td>`).join("")}
-            <td class="v13TotalCell">${outPar}</td>
-            <td class="v13TotalCell">${inPar}</td>
-            <td class="v13TotalCell">${outPar + inPar}</td>
-          </tr>
-          <tr>
-            <td>SCORE</td>
-            ${scoreCells}
-            <td class="v13TotalCell">${outTotal}</td>
-            <td class="v13TotalCell">${inTotal}</td>
-            <td class="v13TotalCell">${totalStrokes}</td>
-          </tr>
-          <tr>
-            <td>±</td>
-            ${diffCells}
-            <td class="v13TotalCell">${outToPar}</td>
-            <td class="v13TotalCell">${inToPar}</td>
-            <td class="v13TotalCell ${parDiffClass(playerScoreToPar(player))}">${totalToPar}</td>
-          </tr>
-        </table>
-      </div>
+      ${makeSection("OUT", outHoles, "OUT")}
+      ${makeSection("IN", inHoles, "IN")}
 
       <div class="v13Hint">SCORE行の数字をタップすると、そのホールのショット履歴を表示します。</div>
       <div id="v13ShotDetail" class="v13Detail"></div>
