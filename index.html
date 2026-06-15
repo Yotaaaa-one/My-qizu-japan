@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v14.1 実戦強化・音声通知版</title>
+  <title>ゴルフトーナメント スコアラー入力システム v15 PWA・アプリ風運用版</title>
+
+  <meta name="theme-color" content="#0b6b3a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PGA Score" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <style>
     :root {
       --green:#0b6b3a;
@@ -1068,6 +1075,46 @@
       max-height:160px;
       overflow:auto;
     }
+
+    /* v15 PWA */
+    .pwaPanel {
+      border:1px solid #b7e0c2;
+      background:linear-gradient(135deg,#eef7f1,#ffffff);
+      border-radius:20px;
+      padding:14px;
+      margin-top:12px;
+    }
+    .pwaGrid {
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:8px;
+      margin-top:10px;
+    }
+    @media (min-width:760px) {
+      .pwaGrid { grid-template-columns:repeat(4,1fr); }
+    }
+    .pwaStatusBox {
+      border:1px solid #d0d5dd;
+      border-radius:16px;
+      padding:10px;
+      background:#fff;
+      font-weight:900;
+      text-align:center;
+    }
+    .pwaStatusBox strong { display:block; font-size:20px; margin-top:4px; color:#073b24; }
+    .pwaInstallHint {
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      background:#fff8db;
+      border:1px solid #f2d06b;
+      color:#614700;
+      font-weight:800;
+      line-height:1.7;
+    }
+    body.pwaStandalone header { padding-top:max(18px, env(safe-area-inset-top)); }
+    body.pwaStandalone { overscroll-behavior-y:none; }
+
   </style>
 </head>
 <body>
@@ -1354,6 +1401,22 @@
         <button class="ghost" id="copyTournamentUrlBtn">大会URLをコピー</button>
       </div>
       <p class="small" id="tournamentUrlLabel" style="word-break:break-all;"></p>
+    </div>
+
+    <div class="card" id="pwaSetupCard">
+      <div>
+        <span class="pill">PWA</span>
+        <h2 class="holeTitle">アプリ風運用設定</h2>
+      </div>
+      <p class="small">iPhone・iPadではSafariから「ホーム画面に追加」で、アプリのように全画面起動できます。Android/Chromeではインストールボタンが使える場合があります。</p>
+      <div class="pwaPanel">
+        <div class="pwaGrid" id="pwaStatusGrid"></div>
+        <div class="utility">
+          <button class="blue" id="pwaInstallBtn">ホーム画面に追加</button>
+          <button class="ghost" id="pwaReloadBtn">画面を再読み込み</button>
+        </div>
+        <div class="pwaInstallHint" id="pwaInstallHint">iPhoneの場合：Safariの共有ボタン →「ホーム画面に追加」を選択してください。</div>
+      </div>
     </div>
 
     <div class="card">
@@ -5123,6 +5186,109 @@ renderV14OperationPanel = function() {
    - 棄権連絡・本部連絡にも組番号を追加
 */
 
+
+
+/* v15 PWA / app-like operation */
+let v15DeferredInstallPrompt = null;
+
+function v15IsStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function v15PwaStatusHtml() {
+  const standalone = v15IsStandalone();
+  const secure = location.protocol === 'https:' || location.hostname === 'localhost';
+  const online = navigator.onLine;
+  const sw = 'serviceWorker' in navigator;
+  return `
+    <div class="pwaStatusBox">起動形式<strong>${standalone ? 'アプリ風' : 'ブラウザ'}</strong></div>
+    <div class="pwaStatusBox">通信<strong>${online ? 'オンライン' : 'オフライン'}</strong></div>
+    <div class="pwaStatusBox">HTTPS<strong>${secure ? 'OK' : '未対応'}</strong></div>
+    <div class="pwaStatusBox">キャッシュ<strong>${sw ? '対応' : '非対応'}</strong></div>
+  `;
+}
+
+function v15RenderPwaPanel() {
+  const grid = $('pwaStatusGrid');
+  if (grid) grid.innerHTML = v15PwaStatusHtml();
+  const hint = $('pwaInstallHint');
+  if (hint) {
+    if (v15IsStandalone()) {
+      hint.textContent = 'ホーム画面から起動中です。アプリ風の全画面運用になっています。';
+    } else if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      hint.textContent = 'iPhone/iPadの場合：Safariの共有ボタン →「ホーム画面に追加」を選択してください。';
+    } else if (v15DeferredInstallPrompt) {
+      hint.textContent = 'この端末ではインストールボタンが使用できます。';
+    } else {
+      hint.textContent = 'Chrome/Edgeではアドレスバー付近のインストール、またはメニューから「アプリをインストール」を選択してください。';
+    }
+  }
+  if (v15IsStandalone()) document.body.classList.add('pwaStandalone');
+}
+
+function v15BindPwaButtons() {
+  const install = $('pwaInstallBtn');
+  if (install) install.onclick = async () => {
+    if (v15DeferredInstallPrompt) {
+      v15DeferredInstallPrompt.prompt();
+      await v15DeferredInstallPrompt.userChoice;
+      v15DeferredInstallPrompt = null;
+      v15RenderPwaPanel();
+    } else {
+      toast('iPhoneはSafariの共有ボタンから「ホーム画面に追加」です');
+    }
+  };
+  const reload = $('pwaReloadBtn');
+  if (reload) reload.onclick = () => location.reload();
+}
+
+function v15RegisterServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (!(location.protocol === 'https:' || location.hostname === 'localhost')) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(() => {
+      console.log('v15 service worker registered');
+    }).catch(err => {
+      console.log('v15 service worker registration skipped:', err.message);
+    });
+  });
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  v15DeferredInstallPrompt = e;
+  v15RenderPwaPanel();
+});
+
+window.addEventListener('appinstalled', () => {
+  v15DeferredInstallPrompt = null;
+  toast('ホーム画面に追加されました');
+  v15RenderPwaPanel();
+});
+
+const v15OriginalRenderAllScreens = renderAllScreens;
+renderAllScreens = function() {
+  v15OriginalRenderAllScreens();
+  v15RenderPwaPanel();
+  v15BindPwaButtons();
+};
+
+const v15OriginalApplyUiMode = applyUiMode;
+applyUiMode = function() {
+  v15OriginalApplyUiMode();
+  if (v15IsStandalone()) document.body.classList.add('pwaStandalone');
+};
+
+v15RegisterServiceWorker();
+
+/* v15 changelog
+   - PWA manifest対応
+   - iPhone/iPad ホーム画面追加案内
+   - Android/Chrome install prompt対応
+   - Service WorkerによるHTML・manifest・iconのキャッシュ下準備
+   - アプリ風起動時のステータス表示
+*/
+
 window.addEventListener('online', () => { toast('オンラインに復帰しました'); if (firebaseReady) saveRemoteStateNow(false); });
 window.addEventListener('offline', () => { toast('オフラインです。入力は端末内に保存されます'); });
 
@@ -5140,6 +5306,9 @@ initFirebaseSync();
 setInterval(() => {
   if ($("publicScreen")?.classList.contains("active")) renderPublicLeaderboard();
 }, 30000);
+
+v15RenderPwaPanel();
+v15BindPwaButtons();
 
 setTimeout(() => {
   try {
