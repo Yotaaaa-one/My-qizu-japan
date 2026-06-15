@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v15 PWA・アプリ風運用版</title>
+  <title>ゴルフトーナメント スコアラー入力システム v15.1 ログインロック版 固定解除PW対応</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1115,12 +1115,67 @@
     body.pwaStandalone header { padding-top:max(18px, env(safe-area-inset-top)); }
     body.pwaStandalone { overscroll-behavior-y:none; }
 
+
+    /* v15.1 scorer login / lock */
+    .loginGateCard {
+      border:2px solid #0b6b3a;
+      background:linear-gradient(160deg,#ffffff,#eef7f1);
+    }
+    .loginGateCard.locked {
+      border-color:#d0d5dd;
+      background:#f8fafc;
+    }
+    .loginCodeBox {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:74px;
+      border-radius:18px;
+      background:#071b12;
+      color:#f6d46b;
+      font-size:38px;
+      font-weight:900;
+      letter-spacing:.18em;
+      margin-top:6px;
+      font-family:ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    .loginStatusBox {
+      border:1px solid #d0d5dd;
+      border-radius:18px;
+      padding:12px;
+      background:#fff;
+      margin-top:10px;
+      font-weight:900;
+      color:#073b24;
+      line-height:1.7;
+    }
+    .loginDangerText {
+      color:#b42318;
+      font-weight:900;
+      font-size:12px;
+      line-height:1.6;
+      margin-top:8px;
+    }
+    body.scorer-locked #scorerScreen > .card:not(#scorerLoginGate) { display:none; }
+    body.scorer-mode #scorerLoginGate { display:none; }
+    .unlockPanel {
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:8px;
+      align-items:end;
+      margin-top:10px;
+    }
+    @media (max-width:640px) {
+      .unlockPanel { grid-template-columns:1fr; }
+      .loginCodeBox { font-size:32px; }
+    }
+
   </style>
 </head>
 <body>
 <header>
-  <h1>スコアラー入力システム v14.1</h1>
-  <p>実戦強化版：誤入力ロック・アラート音・自動スクロール強化</p>
+  <h1>スコアラー入力システム v15.1</h1>
+  <p>PWA・本部ログイン・端末ロック対応版（解除PW固定）</p>
 </header>
 
 <div class="wrap">
@@ -1135,6 +1190,39 @@
   </div>
 
   <section id="scorerScreen" class="screen active">
+
+    <div class="card loginGateCard" id="scorerLoginGate">
+      <div>
+        <span class="pill">SCORER LOGIN</span>
+        <h2 class="holeTitle">スコアラー端末ログイン</h2>
+      </div>
+      <p class="small">本部担当者が大会・担当組を選択して端末を固定します。ログイン後、スコアラー側では担当解除できません。</p>
+      <div class="row" style="margin-top:12px;">
+        <div class="selectBox">
+          <label>大会名</label>
+          <select id="scorerLoginTournamentSelect"></select>
+        </div>
+        <div class="selectBox">
+          <label>担当組</label>
+          <select id="scorerLoginGroupSelect"></select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="selectBox">
+          <label>ログイン用ランダムパスワード（数字4桁）</label>
+          <div class="loginCodeBox" id="scorerLoginCodeBox">----</div>
+        </div>
+        <div class="selectBox">
+          <label>解除用パスワード（全大会共通・固定）</label>
+          <div class="loginStatusBox" style="margin-top:0;">本部解除PW：<strong>000000</strong></div>
+        </div>
+      </div>
+      <div class="utility">
+        <button class="ghost" id="generateScorerLoginCodeBtn">4桁を再生成</button>
+        <button class="blue" id="scorerLoginLockBtn">本部ログインして端末固定</button>
+      </div>
+      <p class="loginDangerText">※ 解除用パスワードは全大会共通で「000000」固定です。スコアラーには共有せず、本部で管理してください。</p>
+    </div>
     <div class="card">
       <div class="row">
         <div class="selectBox">
@@ -1443,6 +1531,20 @@
         組名はシステム側で「第○組」として自動生成します。スタートホールは 1 または 10 を想定しています。<br>
         v9では暫定タイムパーを自動生成しています。次段階でPDF形式に近いタイムパー貼り付け取込に対応します。
       </p>
+    </div>
+
+
+    <div class="card">
+      <div>
+        <span class="pill">LOGIN LOCK</span>
+        <h2 class="holeTitle">スコアラー端末ログイン設定</h2>
+      </div>
+      <p class="small">スコアラー端末の初回ログイン用4桁パスワードを管理します。解除用パスワードは全大会共通で「000000」固定です。ログイン後は端末が担当組固定になります。</p>
+      <div class="loginStatusBox" id="scorerLockStatusBox">現在の端末ロック状態を確認中...</div>
+      <div class="utility">
+        <button class="ghost" id="setupGenerateLoginCodeBtn">4桁パスワード再生成</button>
+        <button class="blue" id="setupCopyLoginInfoBtn">ログイン情報をコピー</button>
+      </div>
     </div>
 
     <div class="card">
@@ -4391,7 +4493,9 @@ $("closeDeviceSuccess").onclick = () => {
 };
 
 $("clearDeviceGroupBtn").onclick = () => {
-  if (confirm("この端末の担当組設定を解除しますか？")) {
+  if (typeof v151ProtectedClearDeviceGroup === "function") {
+    v151ProtectedClearDeviceGroup();
+  } else if (confirm("この端末の担当組設定を解除しますか？")) {
     clearDeviceGroup();
   }
 };
@@ -5287,6 +5391,230 @@ v15RegisterServiceWorker();
    - Android/Chrome install prompt対応
    - Service WorkerによるHTML・manifest・iconのキャッシュ下準備
    - アプリ風起動時のステータス表示
+*/
+
+
+/* v15.1 scorer login / tournament lock */
+const V151_RECENT_TOURNAMENTS_KEY = "golf_score_recent_tournaments_v15_1";
+const V151_ADMIN_UNLOCK_PASSWORD = "000000";
+
+function v151Random4Digit() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function v151EnsureLoginState() {
+  if (!state.deviceLock) state.deviceLock = {};
+  if (!state.deviceLock.loginCode) state.deviceLock.loginCode = v151Random4Digit();
+  state.deviceLock.unlockPassword = V151_ADMIN_UNLOCK_PASSWORD;
+  if (!('lockedAt' in state.deviceLock)) state.deviceLock.lockedAt = null;
+  if (!state.deviceLock.tournamentId) state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
+  if (!state.deviceLock.tournamentName) state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
+}
+
+function v151TournamentOptions() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(V151_RECENT_TOURNAMENTS_KEY) || '[]'); } catch(e) { list = []; }
+  const current = { id:FIREBASE_TOURNAMENT_ID, name:state.tournamentName || FIREBASE_TOURNAMENT_ID };
+  const merged = [current, ...list].filter(x => x && x.id);
+  const seen = new Set();
+  return merged.filter(x => {
+    const id = sanitizeTournamentId(x.id);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).map(x => ({ id:sanitizeTournamentId(x.id), name:x.name || sanitizeTournamentId(x.id) }));
+}
+
+function v151RememberTournament(id, name) {
+  const item = { id:sanitizeTournamentId(id), name:name || sanitizeTournamentId(id), savedAt:new Date().toISOString() };
+  const list = v151TournamentOptions().filter(x => x.id !== item.id);
+  localStorage.setItem(V151_RECENT_TOURNAMENTS_KEY, JSON.stringify([item, ...list].slice(0,12)));
+}
+
+function v151RenderLoginGate() {
+  v151EnsureLoginState();
+  const gate = $('scorerLoginGate');
+  if (!gate) return;
+
+  const locked = isGroupFixed();
+  document.body.classList.toggle('scorer-locked', !locked);
+  gate.classList.toggle('locked', locked);
+
+  const tournamentSelect = $('scorerLoginTournamentSelect');
+  if (tournamentSelect) {
+    const currentValue = tournamentSelect.value || FIREBASE_TOURNAMENT_ID;
+    tournamentSelect.innerHTML = '';
+    v151TournamentOptions().forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `${t.name}（${t.id}）`;
+      tournamentSelect.appendChild(opt);
+    });
+    tournamentSelect.value = currentValue || FIREBASE_TOURNAMENT_ID;
+  }
+
+  const groupSelect = $('scorerLoginGroupSelect');
+  if (groupSelect) {
+    const currentValue = groupSelect.value || state.selectedGroupId;
+    groupSelect.innerHTML = '';
+    state.groups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = `${g.name} / ${g.plannedStart || '-'} / ${g.startHole || 1}H`;
+      groupSelect.appendChild(opt);
+    });
+    groupSelect.value = currentValue || state.selectedGroupId;
+  }
+
+  const codeBox = $('scorerLoginCodeBox');
+  if (codeBox) codeBox.textContent = state.deviceLock.loginCode || '----';
+
+  const status = $('scorerLockStatusBox');
+  if (status) {
+    const group = state.groups.find(g => Number(g.id) === Number(state.deviceGroupId));
+    const lockedText = group ? `固定中：${group.name} / 大会：${state.deviceLock.tournamentName || FIREBASE_TOURNAMENT_ID}` : '未固定：スコアラー端末ログイン待ち';
+    status.innerHTML = `${lockedText}<br>ログイン4桁：<strong>${state.deviceLock.loginCode || '----'}</strong><br>解除パスワード：<strong>全大会共通 000000</strong>`;
+  }
+}
+
+function v151GenerateLoginCode() {
+  v151EnsureLoginState();
+  state.deviceLock.loginCode = v151Random4Digit();
+  saveState();
+  v151RenderLoginGate();
+  toast('4桁パスワードを再生成しました');
+}
+
+function v151LockScorerDevice() {
+  v151EnsureLoginState();
+  const gid = Number($('scorerLoginGroupSelect')?.value || state.selectedGroupId);
+  const group = state.groups.find(g => Number(g.id) === gid);
+  if (!group) { toast('担当組を選択してください'); return; }
+  const unlock = V151_ADMIN_UNLOCK_PASSWORD;
+
+  const selectedTournamentId = $('scorerLoginTournamentSelect')?.value || FIREBASE_TOURNAMENT_ID;
+  const selectedTournamentLabel = $('scorerLoginTournamentSelect')?.selectedOptions?.[0]?.textContent || selectedTournamentId;
+  state.deviceLock.unlockPassword = unlock;
+  state.deviceLock.lockedAt = new Date().toISOString();
+  state.deviceLock.tournamentId = sanitizeTournamentId(selectedTournamentId);
+  state.deviceLock.tournamentName = selectedTournamentLabel.replace(/（.*$/, '') || selectedTournamentId;
+  v151RememberTournament(state.deviceLock.tournamentId, state.deviceLock.tournamentName);
+
+  pendingDeviceGroupId = group.id;
+  setDeviceGroup();
+  v151RenderLoginGate();
+}
+
+function v151ProtectedClearDeviceGroup() {
+  v151EnsureLoginState();
+  const input = prompt('端末設定を解除するには、全大会共通の解除用パスワードを入力してください。');
+  if (input === null) return;
+  if (String(input).trim() !== V151_ADMIN_UNLOCK_PASSWORD) {
+    toast('解除用パスワードが違います');
+    return;
+  }
+  const oldCode = state.deviceLock.loginCode || v151Random4Digit();
+  clearDeviceGroup();
+  state.deviceLock = {
+    loginCode: oldCode,
+    unlockPassword: V151_ADMIN_UNLOCK_PASSWORD,
+    lockedAt: null,
+    tournamentId: FIREBASE_TOURNAMENT_ID,
+    tournamentName: state.tournamentName || FIREBASE_TOURNAMENT_ID
+  };
+  saveState();
+  v151RenderLoginGate();
+}
+
+function v151CopyLoginInfo() {
+  v151EnsureLoginState();
+  const group = state.groups.find(g => Number(g.id) === Number(state.deviceGroupId || state.selectedGroupId));
+  const text = [
+    'PGAスコア入力システム ログイン情報',
+    `大会：${state.deviceLock.tournamentName || state.tournamentName || FIREBASE_TOURNAMENT_ID}`,
+    `担当組：${group ? group.name : '-'}`,
+    `ログイン4桁：${state.deviceLock.loginCode || '----'}`,
+    `解除パスワード：全大会共通 000000`
+  ].join('\n');
+  navigator.clipboard?.writeText(text).then(() => toast('ログイン情報をコピーしました')).catch(() => alert(text));
+}
+
+function v151AddUnlockButtonToNotice() {
+  const notice = $('fixedGroupNotice');
+  if (!notice || !isGroupFixed() || notice.dataset.v151Unlock === '1') return;
+  notice.dataset.v151Unlock = '1';
+  const div = document.createElement('div');
+  div.className = 'unlockPanel';
+  div.innerHTML = `<span class="small">解除は本部専用です。</span><button class="ghost" id="scorerUnlockDeviceBtn" type="button">本部解除</button>`;
+  notice.appendChild(div);
+  const btn = $('scorerUnlockDeviceBtn');
+  if (btn) btn.onclick = v151ProtectedClearDeviceGroup;
+}
+
+const v151OriginalNormalizeLoadedState = normalizeLoadedState;
+normalizeLoadedState = function() {
+  v151OriginalNormalizeLoadedState();
+  v151EnsureLoginState();
+};
+
+const v151OriginalRenderAllScreens = renderAllScreens;
+renderAllScreens = function() {
+  v151OriginalRenderAllScreens();
+  v151RenderLoginGate();
+  v151AddUnlockButtonToNotice();
+};
+
+const v151OriginalRenderScorer = renderScorer;
+renderScorer = function() {
+  v151OriginalRenderScorer();
+  v151RenderLoginGate();
+  v151AddUnlockButtonToNotice();
+};
+
+const v151OriginalRenderTournamentManager = renderTournamentManager;
+renderTournamentManager = function() {
+  v151OriginalRenderTournamentManager();
+  v151RenderLoginGate();
+};
+
+const v151OriginalSwitchTournament = switchTournament;
+switchTournament = function() {
+  const nameBefore = $('tournamentNameInput')?.value?.trim() || '';
+  v151OriginalSwitchTournament();
+  v151RememberTournament(FIREBASE_TOURNAMENT_ID, nameBefore || state.tournamentName || FIREBASE_TOURNAMENT_ID);
+  v151RenderLoginGate();
+};
+
+function v151BindLoginButtons() {
+  const gen1 = $('generateScorerLoginCodeBtn');
+  if (gen1) gen1.onclick = v151GenerateLoginCode;
+  const gen2 = $('setupGenerateLoginCodeBtn');
+  if (gen2) gen2.onclick = v151GenerateLoginCode;
+  const lock = $('scorerLoginLockBtn');
+  if (lock) lock.onclick = v151LockScorerDevice;
+  const copy = $('setupCopyLoginInfoBtn');
+  if (copy) copy.onclick = v151CopyLoginInfo;
+}
+
+const v151OriginalApplyUiMode = applyUiMode;
+applyUiMode = function() {
+  v151OriginalApplyUiMode();
+  v151RenderLoginGate();
+};
+
+window.addEventListener('load', () => {
+  v151EnsureLoginState();
+  v151BindLoginButtons();
+  v151RenderLoginGate();
+});
+
+/* v15.1 changelog
+   - スコアラー端末ログイン画面を追加
+   - 大会名をスクロール選択方式に対応
+   - ログイン用4桁ランダムパスワード生成
+   - 解除用パスワードは全大会共通 000000 固定
+   - 解除用パスワードによる本部専用解除
+   - ログイン後は担当組固定・スコアラー側で通常解除不可
 */
 
 window.addEventListener('online', () => { toast('オンラインに復帰しました'); if (firebaseReady) saveRemoteStateNow(false); });
