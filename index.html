@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v14 実戦運用版</title>
+  <title>ゴルフトーナメント スコアラー入力システム v14.1 実戦強化版</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -1000,12 +1000,80 @@
       margin-top:8px;
       font-size:12px;
     }
+
+
+    /* v14.1 実戦強化 */
+    .v141LockNote {
+      margin-top:8px;
+      padding:9px 10px;
+      border-radius:14px;
+      background:#f8fafc;
+      border:1px solid #d0d5dd;
+      color:#475467;
+      font-size:12px;
+      font-weight:800;
+    }
+    .v141Locked {
+      background:#ecfdf3 !important;
+      border-color:#86efac !important;
+      box-shadow:0 0 0 3px rgba(22,163,74,.08);
+    }
+    .v141DangerText {
+      color:#b42318;
+      font-weight:900;
+      font-size:12px;
+      line-height:1.6;
+      margin-top:8px;
+    }
+    .v141ScrollPanel {
+      max-height:calc(100vh - 210px);
+      overflow:auto;
+      scroll-behavior:smooth;
+      border-radius:18px;
+    }
+    .v141ScrollControls {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:flex-end;
+      margin:0 0 12px;
+    }
+    .v141ScrollControls button {
+      padding:8px 10px;
+      border-radius:12px;
+      font-size:12px;
+    }
+    .v141Badge {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:5px 9px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:900;
+      border:1px solid rgba(246,212,107,.35);
+      color:#f6d46b;
+      background:rgba(246,212,107,.10);
+    }
+    .v141EditLog {
+      margin-top:10px;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      background:#fff;
+      padding:10px;
+      font-size:12px;
+      line-height:1.7;
+      color:#475467;
+      max-height:160px;
+      overflow:auto;
+    }
   </style>
 </head>
 <body>
 <header>
-  <h1>スコアラー入力システム v14</h1>
-  <p>実戦運用版：同期・確認・バックアップ強化</p>
+  <h1>スコアラー入力システム v14.1</h1>
+  <p>実戦強化版：誤入力ロック・アラート音・自動スクロール強化</p>
 </header>
 
 <div class="wrap">
@@ -4429,7 +4497,7 @@ $("toggleFirebaseDebugBtn").onclick = () => {
 /* =========================
    v14 実戦運用版 追加機能
 ========================= */
-const V14_VERSION = "v14.0";
+const V14_VERSION = "v14.1";
 let v14LastLocalSaveAt = null;
 
 function v14DownloadText(filename, text, mime = "text/plain") {
@@ -4624,6 +4692,250 @@ window.addEventListener("beforeunload", e => {
     e.returnValue = "保存待機中のデータがあります。";
   }
 });
+
+
+
+/* =========================
+   v14.1 実戦強化 追加機能
+========================= */
+let v141AudioEnabled = false;
+let v141LastPendingNoticeCount = null;
+let v141PublicScrollTimer = null;
+let v141PublicAutoScroll = true;
+let v141RemotePending = 0;
+
+function v141Normalize() {
+  if (!state.editLogs) state.editLogs = [];
+  if (!state.v141Settings) {
+    state.v141Settings = {
+      lockConfirmedScore: true,
+      alertSound: true,
+      publicAutoScroll: true
+    };
+  }
+}
+
+const v141OriginalNormalizeLoadedState = normalizeLoadedState;
+normalizeLoadedState = function() {
+  v141OriginalNormalizeLoadedState();
+  v141Normalize();
+};
+v141Normalize();
+
+function v141AddEditLog(action, player, hole, beforeValue, afterValue) {
+  v141Normalize();
+  const group = currentGroup();
+  state.editLogs.unshift({
+    id: 'e' + Date.now() + Math.random().toString(16).slice(2),
+    time: nowTimeLabel(),
+    groupName: group?.name || '',
+    playerName: player?.name || '',
+    hole,
+    action,
+    beforeValue: beforeValue ?? '',
+    afterValue: afterValue ?? ''
+  });
+  state.editLogs = state.editLogs.slice(0, 100);
+}
+
+function v141EnableAudio() {
+  v141AudioEnabled = true;
+}
+
+document.addEventListener('click', v141EnableAudio, { once:false });
+document.addEventListener('touchstart', v141EnableAudio, { once:false });
+
+function v141Beep(kind = 'notice') {
+  try {
+    v141Normalize();
+    if (!state.v141Settings.alertSound || !v141AudioEnabled) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = kind === 'danger' ? 880 : 660;
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.24);
+    setTimeout(() => ctx.close?.(), 500);
+  } catch(e) {}
+}
+
+const v141OriginalAddNotice = addNotice;
+addNotice = function(type, playerName, message) {
+  v141OriginalAddNotice(type, playerName, message);
+  v141Beep(type === '棄権' ? 'danger' : 'notice');
+};
+
+const v141OriginalRenderNotices = renderNotices;
+renderNotices = function() {
+  v141OriginalRenderNotices();
+  const pending = (state.notices || []).filter(n => n.status !== '完了').length;
+  if (v141LastPendingNoticeCount !== null && pending > v141LastPendingNoticeCount) v141Beep('notice');
+  v141LastPendingNoticeCount = pending;
+};
+
+const v141OriginalScheduleRemoteSave = scheduleRemoteSave;
+scheduleRemoteSave = function() {
+  v141RemotePending += 1;
+  v141OriginalScheduleRemoteSave();
+  setTimeout(renderV14OperationPanel, 0);
+};
+
+const v141OriginalSaveRemoteStateNow = saveRemoteStateNow;
+saveRemoteStateNow = function(isInitial = false) {
+  v141OriginalSaveRemoteStateNow(isInitial);
+  setTimeout(() => {
+    v141RemotePending = Math.max(0, v141RemotePending - 1);
+    renderV14OperationPanel();
+  }, 1200);
+};
+
+function v141EditLogHtml() {
+  v141Normalize();
+  const logs = state.editLogs || [];
+  if (!logs.length) return '<p class="small">編集履歴はまだありません。</p>';
+  return `<div class="v141EditLog">${logs.slice(0,20).map(l => `
+    <div><strong>${l.time}</strong> ${l.groupName} / ${l.playerName} / H${l.hole}：${l.action}（${l.beforeValue} → ${l.afterValue}）</div>
+  `).join('')}</div>`;
+}
+
+const v141OriginalOperationPanelHtml = v14OperationPanelHtml;
+v14OperationPanelHtml = function(compact = false) {
+  v141Normalize();
+  const base = v141OriginalOperationPanelHtml(compact);
+  const pendingText = v141RemotePending > 0 ? `${v141RemotePending}件` : 'なし';
+  const settings = state.v141Settings;
+  const extra = `
+    <div class="v14OpsGrid">
+      <div class="v14OpsBox ${settings.lockConfirmedScore ? 'v14Ok' : 'v14Warn'}">確定取消ロック<strong>${settings.lockConfirmedScore ? 'ON' : 'OFF'}</strong></div>
+      <div class="v14OpsBox ${settings.alertSound ? 'v14Ok' : 'v14Warn'}">アラート音<strong>${settings.alertSound ? 'ON' : 'OFF'}</strong></div>
+      <div class="v14OpsBox ${settings.publicAutoScroll ? 'v14Ok' : 'v14Warn'}">自動スクロール<strong>${settings.publicAutoScroll ? 'ON' : 'OFF'}</strong></div>
+      <div class="v14OpsBox ${v141RemotePending === 0 ? 'v14Ok' : 'v14Warn'}">未送信目安<strong>${pendingText}</strong></div>
+    </div>
+    ${compact ? '' : `
+      <div class="v14Toolbar">
+        <button class="ghost" id="v141ToggleLockBtn">確定取消ロック 切替</button>
+        <button class="ghost" id="v141ToggleSoundBtn">アラート音 切替</button>
+        <button class="ghost" id="v141ToggleScrollBtn">自動スクロール 切替</button>
+        <button class="ghost" id="v141TestSoundBtn">テスト音</button>
+      </div>
+      ${v141EditLogHtml()}
+    `}
+  `;
+  return base + extra;
+};
+
+const v141OriginalRenderV14OperationPanel = renderV14OperationPanel;
+renderV14OperationPanel = function() {
+  v141OriginalRenderV14OperationPanel();
+  const lock = $('v141ToggleLockBtn');
+  if (lock) lock.onclick = () => { v141Normalize(); state.v141Settings.lockConfirmedScore = !state.v141Settings.lockConfirmedScore; saveState(); renderV14OperationPanel(); };
+  const sound = $('v141ToggleSoundBtn');
+  if (sound) sound.onclick = () => { v141Normalize(); state.v141Settings.alertSound = !state.v141Settings.alertSound; saveState(); renderV14OperationPanel(); };
+  const scroll = $('v141ToggleScrollBtn');
+  if (scroll) scroll.onclick = () => { v141Normalize(); state.v141Settings.publicAutoScroll = !state.v141Settings.publicAutoScroll; v141PublicAutoScroll = state.v141Settings.publicAutoScroll; saveState(); renderV14OperationPanel(); renderPublicLeaderboard(); };
+  const testSound = $('v141TestSoundBtn');
+  if (testSound) testSound.onclick = () => { v141EnableAudio(); v141Beep('notice'); toast('アラート音をテストしました'); };
+};
+
+const v141OriginalUnconfirmHole = unconfirmHole;
+unconfirmHole = function(playerId) {
+  v141Normalize();
+  const player = currentGroup().players.find(p => p.id === playerId);
+  const holeKey = currentHoleKey();
+  const scores = player ? playerScoresStore(player) : {};
+  const before = scores[holeKey];
+  if (state.v141Settings.lockConfirmedScore && !isTestMode()) {
+    const ok = prompt(`本番スコアの確定取消です。\n${player?.name || ''} Hole ${state.selectedHole}\n取消する場合は「取消」と入力してください。`);
+    if (ok !== '取消') {
+      toast('確定取消を中止しました');
+      return;
+    }
+  } else if (!confirm(`${player?.name || ''} のHole ${state.selectedHole}確定を取り消しますか？`)) {
+    return;
+  }
+  v141AddEditLog('確定取消', player, state.selectedHole, before, '未確定');
+  v141OriginalUnconfirmHole(playerId);
+};
+
+const v141OriginalAddShot = addShot;
+addShot = function(playerId, result) {
+  const player = currentGroup().players.find(p => p.id === playerId);
+  const beforeShots = player ? [...playerShots(player, currentHoleKey())] : [];
+  const beforeScore = player ? playerScoresStore(player)[currentHoleKey()] : null;
+  v141OriginalAddShot(playerId, result);
+  if (player && result === 'カップイン' && beforeScore == null) {
+    const afterScore = playerScoresStore(player)[currentHoleKey()];
+    v141AddEditLog('スコア確定', player, state.selectedHole, beforeShots.length + '打目まで', afterScore + '打');
+    saveState({ skipRemote:false });
+  }
+};
+
+const v141OriginalRenderScorer = renderScorer;
+renderScorer = function() {
+  v141OriginalRenderScorer();
+  const group = currentGroup();
+  const holeKey = currentHoleKey();
+  document.querySelectorAll('#playersArea .player').forEach((card, index) => {
+    const player = group.players[index];
+    if (!player) return;
+    const done = playerScores(player)[holeKey] != null;
+    if (done) {
+      card.classList.add('v141Locked');
+      const note = document.createElement('div');
+      note.className = 'v141LockNote';
+      note.textContent = isTestMode(group) ? '仮確定済み：取消時は確認が入ります。' : '本番確定済み：取消には「取消」の入力確認が必要です。';
+      card.appendChild(note);
+    }
+  });
+};
+
+const v141OriginalRenderPublicLeaderboard = renderPublicLeaderboard;
+renderPublicLeaderboard = function() {
+  v141OriginalRenderPublicLeaderboard();
+  v141Normalize();
+  const el = $('publicLeaderboard');
+  if (!el || $('v141PublicScrollPanel')) return;
+  const current = el.innerHTML;
+  const enabled = state.v141Settings.publicAutoScroll;
+  el.innerHTML = `
+    <div class="v141ScrollControls">
+      <span class="v141Badge">自動スクロール：${enabled ? 'ON' : 'OFF'}</span>
+      <button class="ghost" id="v141PublicScrollToggle">切替</button>
+      <button class="ghost" id="v141PublicScrollTop">先頭へ</button>
+    </div>
+    <div class="v141ScrollPanel" id="v141PublicScrollPanel">${current}</div>
+  `;
+  const toggle = $('v141PublicScrollToggle');
+  if (toggle) toggle.onclick = () => { state.v141Settings.publicAutoScroll = !state.v141Settings.publicAutoScroll; v141PublicAutoScroll = state.v141Settings.publicAutoScroll; saveState(); renderPublicLeaderboard(); };
+  const top = $('v141PublicScrollTop');
+  if (top) top.onclick = () => { const panel = $('v141PublicScrollPanel'); if (panel) panel.scrollTop = 0; };
+  bindPublicLeaderboardButtons();
+  v141StartPublicAutoScroll();
+};
+
+function v141StartPublicAutoScroll() {
+  clearInterval(v141PublicScrollTimer);
+  v141Normalize();
+  if (!state.v141Settings.publicAutoScroll) return;
+  v141PublicScrollTimer = setInterval(() => {
+    const screen = $('publicScreen');
+    const panel = $('v141PublicScrollPanel');
+    if (!screen?.classList.contains('active') || !panel) return;
+    const bottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 6;
+    panel.scrollTop = bottom ? 0 : panel.scrollTop + Math.max(80, Math.floor(panel.clientHeight * 0.7));
+  }, 6500);
+}
+
+window.addEventListener('online', () => { toast('オンラインに復帰しました'); if (firebaseReady) saveRemoteStateNow(false); });
+window.addEventListener('offline', () => { toast('オフラインです。入力は端末内に保存されます'); });
 
 applyFixedGroupFromUrl();
 applyUiMode();
