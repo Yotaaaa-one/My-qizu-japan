@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13.1</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13.2</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,7 +942,7 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v13.1</h1>
+  <h1>スコアラー入力プロトタイプ v13.2</h1>
   <p>スコアラーランキング・HBHスマホ最適化版</p>
 </header>
 
@@ -1679,6 +1679,7 @@ function normalizeLoadedState() {
   if (!state.assignedDeviceGroupIds) state.assignedDeviceGroupIds = [];
   if (!state.publicFavorites) state.publicFavorites = [];
   if (!state.publicOpenPlayers) state.publicOpenPlayers = [];
+if (!state.scorerOpenPlayers) state.scorerOpenPlayers = [];
   if (!state.monitorOpenPlayers) state.monitorOpenPlayers = [];
   if (!state.coursePar) {
     state.coursePar = {
@@ -3076,6 +3077,7 @@ function toggleFavoritePlayer(playerId) {
 
 function togglePublicPlayerDetails(playerId) {
   if (!state.publicOpenPlayers) state.publicOpenPlayers = [];
+if (!state.scorerOpenPlayers) state.scorerOpenPlayers = [];
 if (!state.monitorOpenPlayers) state.monitorOpenPlayers = [];
   if (state.publicOpenPlayers.includes(playerId)) {
     state.publicOpenPlayers = state.publicOpenPlayers.filter(id => id !== playerId);
@@ -3396,6 +3398,134 @@ function bindV13HbhButtons() {
   });
 }
 
+function isScorerFavoritePlayer(playerId) {
+  return (state.publicFavorites || []).includes(playerId);
+}
+
+function isScorerOpenPlayer(playerId) {
+  return (state.scorerOpenPlayers || []).includes(playerId);
+}
+
+function toggleScorerFavoritePlayer(playerId) {
+  if (!state.publicFavorites) state.publicFavorites = [];
+  if (state.publicFavorites.includes(playerId)) {
+    state.publicFavorites = state.publicFavorites.filter(id => id !== playerId);
+  } else {
+    state.publicFavorites.push(playerId);
+  }
+  saveState();
+  renderScorerRanking();
+  renderPublicLeaderboard();
+}
+
+function toggleScorerRankingDetail(playerId) {
+  if (!state.scorerOpenPlayers) state.scorerOpenPlayers = [];
+  if (state.scorerOpenPlayers.includes(playerId)) {
+    state.scorerOpenPlayers = state.scorerOpenPlayers.filter(id => id !== playerId);
+  } else {
+    state.scorerOpenPlayers.push(playerId);
+  }
+  saveState();
+  renderScorerRanking();
+}
+
+function scorerRankingHbhSection(player, holes, label) {
+  const sectionScore = hbhSubtotal(player, holes);
+  const sectionPar = hbhParTotal(holes);
+  const sectionToPar = hbhToPar(player, holes);
+
+  return `
+    <div style="margin-top:8px;font-weight:900;color:#f6d46b;">${label}</div>
+    <div class="scorerRankHbhScroll">
+      <table class="scorerRankHbhTable">
+        <tr>
+          <th>HOLE</th>
+          ${holes.map(h => `<th>${h}</th>`).join("")}
+          <th>${label}</th>
+        </tr>
+        <tr>
+          <td>PAR</td>
+          ${holes.map(h => `<td>${getParForHole(h)}</td>`).join("")}
+          <td><strong>${sectionPar}</strong></td>
+        </tr>
+        <tr>
+          <td>SCORE</td>
+          ${holes.map(h => {
+            const score = player.scores?.["h" + h] ?? "-";
+            const diff = player.scores?.["h" + h] == null ? null : Number(player.scores["h" + h]) - getParForHole(h);
+            return `<td class="${diff == null ? "" : parDiffClass(diff)}">${score}</td>`;
+          }).join("")}
+          <td><strong>${sectionScore}</strong></td>
+        </tr>
+        <tr>
+          <td>±</td>
+          ${holes.map(h => {
+            const score = player.scores?.["h" + h];
+            const diff = score == null ? null : Number(score) - getParForHole(h);
+            return `<td class="${diff == null ? "" : parDiffClass(diff)}">${diff == null ? "-" : parDiffLabel(diff)}</td>`;
+          }).join("")}
+          <td><strong>${sectionToPar}</strong></td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
+function scorerRankingDetailHtml(player) {
+  const outHoles = [1,2,3,4,5,6,7,8,9];
+  const inHoles = [10,11,12,13,14,15,16,17,18];
+  return `
+    <div class="scorerRankDetail ${isScorerOpenPlayer(player.id) ? "show" : ""}">
+      ${scorerRankingHbhSection(player, outHoles, "OUT")}
+      ${scorerRankingHbhSection(player, inHoles, "IN")}
+    </div>
+  `;
+}
+
+function scorerRankingCardHtml(r, rank, mine) {
+  const scoreToPar = playerScoreToPar(r.player);
+  const fav = isScorerFavoritePlayer(r.player.id);
+  const open = isScorerOpenPlayer(r.player.id);
+
+  return `
+    <div class="scorerRankCard ${mine ? "mine" : ""}">
+      <div class="scorerRankTop">
+        <div style="display:flex;gap:10px;min-width:0;">
+          <div class="scorerRankNo">${rank || ""}</div>
+          <div style="min-width:0;">
+            <div class="scorerRankActions">
+              <button class="scorerRankFav" data-scorer-fav="${r.player.id}">${fav ? "★" : "☆"}</button>
+              <button class="scorerRankNameBtn" data-scorer-rank-detail="${r.player.id}">
+                ${open ? "▼" : "▶"} ${mine ? "★ " : ""}${r.player.name}
+              </button>
+            </div>
+            <div class="scorerRankAff">${r.player.affiliation || ""}</div>
+          </div>
+        </div>
+        <div class="${parDiffClass(scoreToPar)}" style="font-size:22px;font-weight:900;">${parDiffLabel(scoreToPar)}</div>
+      </div>
+      <div class="scorerRankStats">
+        <div class="scorerRankStat">SCORE<strong class="${parDiffClass(scoreToPar)}">${parDiffLabel(scoreToPar)}</strong></div>
+        <div class="scorerRankStat">THRU<strong>${r.holes}H</strong></div>
+        <div class="scorerRankStat">TOTAL<strong>${totalScore(r.player)}</strong></div>
+      </div>
+      ${scorerRankingDetailHtml(r.player)}
+    </div>
+  `;
+}
+
+function bindScorerRankingButtons() {
+  document.querySelectorAll("[data-scorer-fav]").forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      toggleScorerFavoritePlayer(btn.dataset.scorerFav);
+    };
+  });
+  document.querySelectorAll("[data-scorer-rank-detail]").forEach(btn => {
+    btn.onclick = () => toggleScorerRankingDetail(btn.dataset.scorerRankDetail);
+  });
+}
+
 function renderScorerRanking() {
   const el = $("scorerRankingBoard");
   const updated = $("scorerRankingUpdated");
@@ -3416,33 +3546,25 @@ function renderScorerRanking() {
     return;
   }
 
+  const favRows = rows.filter(r => isScorerFavoritePlayer(r.player.id));
+
+  const favBlock = favRows.length ? `
+    <div class="scorerRankFavoriteBlock">
+      <h3>★ フェイバリットプレーヤー</h3>
+      <div class="scorerRankList">
+        ${favRows.map(r => scorerRankingCardHtml(r, "", myIds.includes(r.player.id))).join("")}
+      </div>
+    </div>
+  ` : "";
+
   el.innerHTML = `
+    ${favBlock}
     <div class="scorerRankList">
-      ${rows.map((r,i) => {
-        const mine = myIds.includes(r.player.id);
-        const scoreToPar = playerScoreToPar(r.player);
-        return `
-          <div class="scorerRankCard ${mine ? "mine" : ""}">
-            <div class="scorerRankTop">
-              <div style="display:flex;gap:10px;">
-                <div class="scorerRankNo">${i + 1}</div>
-                <div>
-                  <div class="scorerRankName">${mine ? "★ " : ""}${r.player.name}</div>
-                  <div class="scorerRankAff">${r.player.affiliation || ""}</div>
-                </div>
-              </div>
-              <div class="${parDiffClass(scoreToPar)}" style="font-size:22px;font-weight:900;">${parDiffLabel(scoreToPar)}</div>
-            </div>
-            <div class="scorerRankStats">
-              <div class="scorerRankStat">SCORE<strong class="${parDiffClass(scoreToPar)}">${parDiffLabel(scoreToPar)}</strong></div>
-              <div class="scorerRankStat">THRU<strong>${r.holes}H</strong></div>
-              <div class="scorerRankStat">TOTAL<strong>${totalScore(r.player)}</strong></div>
-            </div>
-          </div>
-        `;
-      }).join("")}
+      ${rows.map((r,i) => scorerRankingCardHtml(r, i + 1, myIds.includes(r.player.id))).join("")}
     </div>
   `;
+
+  bindScorerRankingButtons();
 }
 
 function renderPublicLeaderboard() {
