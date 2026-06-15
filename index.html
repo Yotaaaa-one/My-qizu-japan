@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13.2</title>
+  <title>ゴルフトーナメント スコアラー入力プロトタイプ v13.3</title>
   <style>
     :root {
       --green:#0b6b3a;
@@ -942,7 +942,7 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力プロトタイプ v13.2</h1>
+  <h1>スコアラー入力プロトタイプ v13.3</h1>
   <p>スコアラーランキング・HBHスマホ最適化版</p>
 </header>
 
@@ -1585,6 +1585,7 @@ let pendingWithdrawPlayerId = null;
 let pendingRefereePlayerId = null;
 let pendingDeviceGroupId = null;
 let activeScorerHbhPlayerId = null;
+let scorerRankingInitialized = false;
 
 const urlParams = new URLSearchParams(window.location.search);
 const fixedGroupIdFromUrl = Number(urlParams.get("group") || 0);
@@ -3421,9 +3422,10 @@ function toggleScorerFavoritePlayer(playerId) {
 function toggleScorerRankingDetail(playerId) {
   if (!state.scorerOpenPlayers) state.scorerOpenPlayers = [];
   if (state.scorerOpenPlayers.includes(playerId)) {
-    state.scorerOpenPlayers = state.scorerOpenPlayers.filter(id => id !== playerId);
+    state.scorerOpenPlayers = [];
   } else {
-    state.scorerOpenPlayers.push(playerId);
+    // スマホで見やすいように、開く詳細は1選手だけ
+    state.scorerOpenPlayers = [playerId];
   }
   saveState();
   renderScorerRanking();
@@ -3527,6 +3529,12 @@ function bindScorerRankingButtons() {
 }
 
 function renderScorerRanking() {
+  // 初回表示はランキング一覧のみ。詳細は選手名タップ時だけ展開。
+  if (!state.scorerOpenPlayers) state.scorerOpenPlayers = [];
+  if (!scorerRankingInitialized) {
+    state.scorerOpenPlayers = [];
+    scorerRankingInitialized = true;
+  }
   const el = $("scorerRankingBoard");
   const updated = $("scorerRankingUpdated");
   if (!el) return;
