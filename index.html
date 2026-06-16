@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Login v16.4</title>
+  <title>PGA Score Login v16.4.2.2</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1173,7 +1173,7 @@
   </style>
 
 <style id="v163-force-style">
-/* v16.4 physical page separation */
+/* v16.4.2.2 physical page separation */
 body.v163-page-login .tabs,
 body.v163-page-monitor .tabs,
 body.v163-page-public .tabs { display:none !important; }
@@ -1198,7 +1198,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 </head>
 <body class="v163-page-login">
 <header>
-  <h1>スコアラー入力システム v16.4</h1>
+  <h1>スコアラー入力システム v16.4.2.2</h1>
   <p>PWA・ページ完全分離・ログイン専用</p>
 </header>
 
@@ -6285,10 +6285,10 @@ window.addEventListener('load', function(){
       const badgeId='v163PageBadge';
       if (!document.getElementById(badgeId)) {
         const b=document.createElement('div'); b.id=badgeId; b.className='v163PageBadge';
-        b.textContent = 'V16.4 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
+        b.textContent = 'V16.4.1.1 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
         const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
       }
-    } catch(e) { console.warn('v16.4 page force', e); }
+    } catch(e) { console.warn('v16.4.2.2 page force', e); }
   }
   window.addEventListener('DOMContentLoaded', apply);
   window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
@@ -6296,83 +6296,290 @@ window.addEventListener('load', function(){
 })();
 </script>
 
-
-<script id="v164-login-fix">
+<script id="v1641-login-fix">
 (function(){
-  const V164_VERSION = 'v16.4';
+  const VERSION = 'v16.4.2.2';
   function $(id){ return document.getElementById(id); }
-  function showMsg(msg){
-    try { if (typeof toast === 'function') toast(msg); else alert(msg); }
-    catch(e){ alert(msg); }
+  function norm4(value){
+    return String(value || '')
+      .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+      .replace(/[^0-9]/g, '')
+      .slice(0, 4);
   }
-  function currentLoginCode(){
+  function status(message, isError){
+    let el = $('v1641LoginStatus');
+    const gate = $('scorerLoginGate');
+    if (!el && gate) {
+      el = document.createElement('div');
+      el.id = 'v1641LoginStatus';
+      el.className = 'loginStatusBox';
+      el.style.marginTop = '10px';
+      gate.appendChild(el);
+    }
+    if (el) {
+      el.textContent = message;
+      el.style.color = isError ? '#b42318' : '#073b24';
+      el.style.borderColor = isError ? '#fda29b' : '#b7e0c2';
+      el.style.background = isError ? '#fef3f2' : '#eef7f1';
+    }
+    if (typeof toast === 'function') toast(message);
+  }
+  async function pullLatestState(){
     try {
-      if (typeof v152Normalize === 'function') v152Normalize();
-      if (typeof v151EnsureLoginState === 'function') v151EnsureLoginState();
-      return String((window.state && state.deviceLock && state.deviceLock.loginCode) || '').trim();
+      if (!window.firebase) return false;
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+      const snap = await db.collection('tournaments').doc(FIREBASE_TOURNAMENT_ID).get();
+      const data = snap.exists ? snap.data() : null;
+      if (data && data.state) {
+        state = data.state;
+        if (typeof normalizeLoadedState === 'function') normalizeLoadedState();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (typeof renderAllScreens === 'function') renderAllScreens();
+        return true;
+      }
     } catch(e) {
-      return String((window.state && state.deviceLock && state.deviceLock.loginCode) || '').trim();
+      console.warn('v16.4.2.2 login remote pull failed', e);
+    }
+    return false;
+  }
+  function currentExpected(){
+    if (typeof v151EnsureLoginState === 'function') v151EnsureLoginState();
+    return norm4(state && state.deviceLock && state.deviceLock.loginCode);
+  }
+  async function fixedLogin(){
+    const btn = $('scorerLoginLockBtn');
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = '認証確認中...'; }
+      const input = norm4($('v16LoginPasswordInput') ? $('v16LoginPasswordInput').value : '');
+      if (input.length !== 4) { status('4桁のログインPWを入力してください', true); return; }
+
+      let expected = currentExpected();
+      let ok = expected && input === expected;
+      if (!ok) {
+        status('Firebaseの最新ログインPWを確認中...', false);
+        await pullLatestState();
+        expected = currentExpected();
+        ok = expected && input === expected;
+      }
+      if (!ok) {
+        status('ログインPWが違います。本部画面の最新PWを確認してください。', true);
+        return;
+      }
+
+      const gid = Number(($('scorerLoginGroupSelect') && $('scorerLoginGroupSelect').value) || state.selectedGroupId || 1);
+      const group = (state.groups || []).find(g => Number(g.id) === gid) || (state.groups || [])[0];
+      const tournamentSelect = $('scorerLoginTournamentSelect');
+      const selectedTournamentId = (tournamentSelect && tournamentSelect.value) || FIREBASE_TOURNAMENT_ID;
+      const selectedTournamentLabel = (tournamentSelect && tournamentSelect.selectedOptions && tournamentSelect.selectedOptions[0] && tournamentSelect.selectedOptions[0].textContent) || selectedTournamentId;
+
+      if (group) {
+        state.selectedGroupId = group.id;
+        state.selectedHole = group.startHole || 1;
+        state.deviceGroupId = group.id;
+      }
+      state.deviceLock = Object.assign({}, state.deviceLock || {}, {
+        loginCode: expected,
+        unlockPassword: '000000',
+        lockedAt: new Date().toISOString(),
+        lockedBy: VERSION,
+        tournamentId: selectedTournamentId,
+        tournamentName: selectedTournamentLabel
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (typeof saveState === 'function') saveState();
+      status('ログイン成功。スコアラー画面へ移動します。', false);
+      setTimeout(function(){ location.href = 'scorer.html' + (location.search || ''); }, 250);
+    } finally {
+      setTimeout(function(){ if (btn) { btn.disabled = false; btn.textContent = 'ログインして端末固定'; } }, 900);
     }
   }
-  function selectedGroup(){
-    const gid = Number($('scorerLoginGroupSelect')?.value || (window.state && state.selectedGroupId) || 0);
-    return (window.state && state.groups || []).find(g => Number(g.id) === gid);
+  function install(){
+    const input = $('v16LoginPasswordInput');
+    if (input) {
+      input.setAttribute('maxlength','4');
+      input.addEventListener('input', function(){ this.value = norm4(this.value); });
+    }
+    const btn = $('scorerLoginLockBtn');
+    if (btn) {
+      btn.textContent = 'ログインして端末固定';
+      btn.onclick = function(ev){ ev.preventDefault(); fixedLogin(); return false; };
+    }
+    const badge = document.getElementById('v163PageBadge');
+    if (badge) badge.textContent = 'V16.4.1 / ログイン専用';
+  }
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(install, 200); });
+  window.addEventListener('load', function(){ install(); setTimeout(install, 700); setTimeout(install, 1800); });
+})();
+</script>
+
+
+<script id="v1642-login-source-fix">
+(function(){
+  const VERSION = 'v16.4.2';
+  const LOCK_KEY = 'pga_score_scorer_lock_v1642';
+  function $(id){ return document.getElementById(id); }
+  function norm4(value){
+    return String(value || '')
+      .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+      .replace(/[^0-9]/g, '')
+      .slice(0,4);
+  }
+  function sanitizeId(value){
+    if (typeof sanitizeTournamentId === 'function') return sanitizeTournamentId(value);
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'') || 'demo_tournament';
   }
   function selectedTournament(){
     const sel = $('scorerLoginTournamentSelect');
-    const id = String(sel?.value || window.FIREBASE_TOURNAMENT_ID || 'demo_tournament');
-    const label = String(sel?.selectedOptions?.[0]?.textContent || id).replace(/（.*$/, '') || id;
-    return {id, label};
+    const raw = (sel && sel.value) || (window.FIREBASE_TOURNAMENT_ID || 'demo_tournament');
+    return {
+      id: sanitizeId(raw),
+      label: (sel && sel.selectedOptions && sel.selectedOptions[0] && sel.selectedOptions[0].textContent.replace(/（.*$/, '').trim()) || raw
+    };
   }
-  function lockAndGo(){
-    const input = String($('v16LoginPasswordInput')?.value || '').trim();
-    const expected = currentLoginCode();
-    if (!/^\d{4}$/.test(input)) { showMsg('4桁パスワードを入力してください'); return false; }
-    if (!expected || input !== expected) { showMsg('ログインパスワードが違います'); return false; }
-    const group = selectedGroup();
-    if (!group) { showMsg('担当組を選択してください'); return false; }
-    const tournament = selectedTournament();
+  function selectedGroup(){
+    const gid = Number(($('scorerLoginGroupSelect') && $('scorerLoginGroupSelect').value) || (window.state && state.selectedGroupId) || 1);
+    return ((window.state && state.groups) || []).find(g => Number(g.id) === gid) || ((window.state && state.groups) || [])[0] || {id:gid, name:'第'+gid+'組', startHole:1};
+  }
+  function status(message, isError){
+    let el = $('v1642LoginStatus');
+    const gate = $('scorerLoginGate');
+    if (!el && gate) {
+      el = document.createElement('div');
+      el.id = 'v1642LoginStatus';
+      el.className = 'loginStatusBox';
+      el.style.marginTop = '10px';
+      gate.appendChild(el);
+    }
+    if (el) {
+      el.textContent = message;
+      el.style.color = isError ? '#b42318' : '#073b24';
+      el.style.borderColor = isError ? '#fda29b' : '#b7e0c2';
+      el.style.background = isError ? '#fef3f2' : '#eef7f1';
+    }
+    if (typeof toast === 'function') toast(message);
+  }
+  async function ensureFirebase(){
+    if (!window.firebase) return null;
     try {
-      if (typeof sanitizeTournamentId === 'function') tournament.id = sanitizeTournamentId(tournament.id);
-      if (typeof TOURNAMENT_ID_STORAGE_KEY !== 'undefined') localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, tournament.id);
-      if (window.state) {
-        if (!state.deviceLock) state.deviceLock = {};
-        state.deviceGroupId = group.id;
-        state.selectedGroupId = group.id;
-        state.selectedHole = group.startHole || 1;
-        if (!Array.isArray(state.assignedDeviceGroupIds)) state.assignedDeviceGroupIds = [];
-        if (!state.assignedDeviceGroupIds.some(id => Number(id) === Number(group.id))) state.assignedDeviceGroupIds.push(group.id);
-        state.deviceLock.unlockPassword = '000000';
-        state.deviceLock.lockedAt = new Date().toISOString();
-        state.deviceLock.tournamentId = tournament.id;
-        state.deviceLock.tournamentName = tournament.label;
-        if (typeof saveState === 'function') saveState({skipRemote:false});
-        else localStorage.setItem('golf_score_prototype_v12_2', JSON.stringify(state));
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      return firebase.firestore();
+    } catch(e) { console.warn('v16.4.2 firebase init failed', e); return null; }
+  }
+  async function fetchTournamentState(tournamentId){
+    const db = await ensureFirebase();
+    if (!db) return null;
+    try {
+      const snap = await db.collection('tournaments').doc(tournamentId).get();
+      if (snap.exists) {
+        const data = snap.data();
+        if (data && data.state) return data.state;
       }
-    } catch(e) { console.warn('v16.4 login save', e); }
-    showMsg('ログインしました。スコアラー画面へ移動します');
-    const url = new URL('scorer.html', location.href);
-    url.searchParams.set('tournament', tournament.id);
-    setTimeout(function(){ location.replace(url.toString()); }, 250);
-    return false;
+    } catch(e) { console.warn('v16.4.2 tournament fetch failed', e); }
+    return null;
+  }
+  function applyRemoteState(remoteState){
+    if (!remoteState) return;
+    try {
+      window.state = remoteState;
+      if (typeof normalizeLoadedState === 'function') normalizeLoadedState();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (typeof renderAllScreens === 'function') renderAllScreens();
+    } catch(e) { console.warn('v16.4.2 apply remote state failed', e); }
+  }
+  function localExpected(){
+    try { if (typeof v151EnsureLoginState === 'function') v151EnsureLoginState(); } catch(e) {}
+    return norm4(window.state && state.deviceLock && state.deviceLock.loginCode);
+  }
+  async function expectedFromSelectedTournament(tournamentId){
+    const remoteState = await fetchTournamentState(tournamentId);
+    if (remoteState && remoteState.deviceLock && remoteState.deviceLock.loginCode) {
+      applyRemoteState(remoteState);
+      return { code: norm4(remoteState.deviceLock.loginCode), source:'Firebase最新' };
+    }
+    return { code: localExpected(), source:'この端末の保存データ' };
+  }
+  function saveLocalScorerLock(tournament, group, loginCode){
+    const lock = {
+      locked: true,
+      version: VERSION,
+      tournamentId: tournament.id,
+      tournamentName: tournament.label,
+      groupId: Number(group.id),
+      groupName: group.name || ('第' + group.id + '組'),
+      startHole: Number(group.startHole || 1),
+      loginCode: loginCode,
+      unlockPassword: '000000',
+      lockedAt: new Date().toISOString()
+    };
+    localStorage.setItem(LOCK_KEY, JSON.stringify(lock));
+    localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, tournament.id);
+    try {
+      if (!window.state) return lock;
+      if (!state.deviceLock) state.deviceLock = {};
+      state.deviceGroupId = lock.groupId;
+      state.selectedGroupId = lock.groupId;
+      state.selectedHole = lock.startHole;
+      state.deviceLock = Object.assign({}, state.deviceLock, {
+        loginCode: loginCode,
+        unlockPassword: '000000',
+        lockedAt: lock.lockedAt,
+        lockedBy: VERSION,
+        tournamentId: tournament.id,
+        tournamentName: tournament.label
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch(e) { console.warn('v16.4.2 local lock save failed', e); }
+    return lock;
+  }
+  async function loginAndGo(ev){
+    if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+    const btn = $('scorerLoginLockBtn');
+    try {
+      if (btn) { btn.disabled = true; btn.textContent = '認証確認中...'; }
+      const input = norm4($('v16LoginPasswordInput') ? $('v16LoginPasswordInput').value : '');
+      if (input.length !== 4) { status('4桁のログインPWを入力してください', true); return false; }
+      const tournament = selectedTournament();
+      const group = selectedGroup();
+      status('本部PWを確認中...（大会ID：' + tournament.id + '）', false);
+      const expected = await expectedFromSelectedTournament(tournament.id);
+      if (!expected.code) { status('ログインPWを取得できません。先に本部画面でPWを再生成してください。', true); return false; }
+      if (input !== expected.code) {
+        status('ログインPWが違います。参照元：' + expected.source + ' / 大会ID：' + tournament.id, true);
+        return false;
+      }
+      saveLocalScorerLock(tournament, group, expected.code);
+      status('ログイン成功。スコアラー画面へ移動します。', false);
+      const url = new URL('scorer.html', location.href);
+      url.searchParams.set('tournament', tournament.id);
+      setTimeout(function(){ location.replace(url.toString()); }, 180);
+      return false;
+    } finally {
+      setTimeout(function(){ if (btn) { btn.disabled = false; btn.textContent = 'ログインして端末固定'; } }, 900);
+    }
   }
   function bind(){
-    const btn = $('scorerLoginLockBtn');
-    if (!btn) return;
-    btn.textContent = 'ログインして端末固定';
-    btn.onclick = lockAndGo;
     const input = $('v16LoginPasswordInput');
-    if (input && !input.dataset.v164Bound) {
-      input.dataset.v164Bound = '1';
-      input.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); lockAndGo(); } });
+    if (input && !input.dataset.v1642Bound) {
+      input.dataset.v1642Bound = '1';
+      input.setAttribute('maxlength','4');
+      input.addEventListener('input', function(){ this.value = norm4(this.value); });
+      input.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ loginAndGo(e); } });
     }
+    const btn = $('scorerLoginLockBtn');
+    if (btn) {
+      btn.textContent = 'ログインして端末固定';
+      btn.onclick = loginAndGo;
+    }
+    const badge = $('v163PageBadge');
+    if (badge) badge.textContent = 'V16.4.2 / ログイン専用';
     const h = document.querySelector('header h1');
-    if (h && !h.textContent.includes('v16.4')) h.textContent = h.textContent.replace(/v16\.\d+(\.\d+)?/i, 'v16.4');
+    if (h) h.textContent = 'スコアラー端末ログイン v16.4.2';
   }
-  window.v164LoginAndRedirect = lockAndGo;
-  window.addEventListener('DOMContentLoaded', bind);
-  window.addEventListener('load', function(){ bind(); setTimeout(bind,500); setTimeout(bind,1500); });
-  setTimeout(bind,300);
+  window.v1642LoginAndGo = loginAndGo;
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(bind, 100); });
+  window.addEventListener('load', function(){ bind(); setTimeout(bind,500); setTimeout(bind,1500); setTimeout(bind,2500); });
+  setTimeout(bind,250);
 })();
 </script>
 
