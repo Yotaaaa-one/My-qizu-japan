@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v16.1 実戦アプリ版</title>
+  <title>ゴルフトーナメント スコアラー入力システム v16.2.1 実戦アプリ版</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1174,22 +1174,22 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力システム v16.1</h1>
-  <p>PWA・ログイン本線・非常用QR・本部復帰対応版</p>
+  <h1>スコアラー入力システム v16.2.1</h1>
+  <p>PWA・ページ分離・ログインPW管理・本部復帰対応版</p>
 </header>
 
 <div class="wrap">
   <div class="tabs">
-    <button class="tab active" id="scorerTab">スコア入力</button>
+    <button class="tab" id="scorerTab">スコア入力</button>
     <button class="tab scorerOnlyTab" id="scorerHbhTab">ホールバイホール</button>
     <button class="tab scorerOnlyTab" id="scorerRankingTab">ランキング</button>
     <button class="tab hqOnly" id="leaderboardTab">本部管理</button>
-    <button class="tab hqOnly" id="monitorTab">本部モニター</button>
+    <button class="tab hqOnly active" id="monitorTab">本部モニター</button>
     <button class="tab hqOnly" id="publicTab">一般モニター</button>
     <button class="tab hqOnly" id="setupTab">大会データ</button>
   </div>
 
-  <section id="scorerScreen" class="screen active">
+  <section id="scorerScreen" class="screen">
 
     <div class="card loginGateCard" id="scorerLoginGate">
       <div>
@@ -1418,7 +1418,7 @@
     </div>
   </section>
 
-  <section id="monitorScreen" class="screen">
+  <section id="monitorScreen" class="screen active">
     <div class="monitorHero">
       <h2>本部モニター</h2>
       <p class="small" style="color:rgba(255,255,255,.86);">ランキング・進行・要請・棄権を1画面で確認する管制塔ビューです。</p>
@@ -6228,5 +6228,10 @@ window.addEventListener('load', () => setTimeout(v162RenderLoginManager, 900));
 */
 
 </script>
+
+<script>
+window.addEventListener('load', function(){ setTimeout(function(){ try { if (typeof switchTab === 'function') switchTab('monitor'); } catch(e){} }, 1200); });
+</script>
+
 </body>
 </html>
