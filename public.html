@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Public v16.3</title>
+  <title>PGA Score Public v16.4</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1173,7 +1173,7 @@
   </style>
 
 <style id="v163-force-style">
-/* v16.3 physical page separation */
+/* v16.4 physical page separation */
 body.v163-page-login .tabs,
 body.v163-page-monitor .tabs,
 body.v163-page-public .tabs { display:none !important; }
@@ -1198,7 +1198,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 </head>
 <body class="v163-page-public">
 <header>
-  <h1>一般モニター v16.3</h1>
+  <h1>一般モニター v16.4</h1>
   <p>リーダーボード表示専用</p>
 </header>
 
@@ -6281,10 +6281,10 @@ window.addEventListener('load', function(){ setTimeout(function(){ try { if (typ
       const badgeId='v163PageBadge';
       if (!document.getElementById(badgeId)) {
         const b=document.createElement('div'); b.id=badgeId; b.className='v163PageBadge';
-        b.textContent = 'V16.3 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
+        b.textContent = 'V16.4 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
         const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
       }
-    } catch(e) { console.warn('v16.3 page force', e); }
+    } catch(e) { console.warn('v16.4 page force', e); }
   }
   window.addEventListener('DOMContentLoaded', apply);
   window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
