@@ -6104,6 +6104,129 @@ setTimeout(v16ApplyPageMode, 900);
    - QRの autologin=1 の場合のみ scorer.html へ即遷移
 */
 
+
+
+/* =========================
+   v16.2 本部ログインPW管理
+   - hq.html で現在の4桁ログインPWを確認・再生成・コピー
+   - スコアラー login(index.html) が参照するPWと同期
+========================= */
+function v162IsHqPage(){
+  try { return typeof v16PageName === 'function' && v16PageName() === 'hq'; } catch(e) { return false; }
+}
+function v162CurrentLoginInfoText(){
+  v152Normalize();
+  return [
+    'PGAスコア入力システム ログイン情報',
+    `大会：${state.deviceLock?.tournamentName || state.tournamentName || FIREBASE_TOURNAMENT_ID}`,
+    `大会ID：${state.deviceLock?.tournamentId || FIREBASE_TOURNAMENT_ID}`,
+    `ログインPW：${state.deviceLock?.loginCode || '----'}`,
+    `本部解除PW：000000`
+  ].join('\n');
+}
+function v162RenderLoginManager(){
+  if (!v162IsHqPage()) return;
+  v152Normalize();
+  const screen = $('leaderboardScreen');
+  if (!screen) return;
+  let card = $('v162LoginManagerCard');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'v162LoginManagerCard';
+    screen.insertBefore(card, screen.children[1] || null);
+  }
+  const groupOptions = (state.groups || []).map(g => `<option value="${g.id}">${g.name} / ${g.plannedStart || '-'} / ${g.startHole || 1}H</option>`).join('');
+  card.innerHTML = `
+    <div class="between">
+      <div>
+        <span class="pill">LOGIN MANAGEMENT</span>
+        <h2 class="holeTitle">ログインPW管理</h2>
+      </div>
+      <div class="loginCodeBox" style="min-height:58px;font-size:30px;min-width:150px;letter-spacing:.14em;">${state.deviceLock?.loginCode || '----'}</div>
+    </div>
+    <p class="small">スコアラー端末のログイン画面で入力する4桁PWです。本部で確認・再生成し、スコアラー端末へ共有してください。</p>
+    <div class="loginStatusBox" style="margin-top:10px;">
+      大会：<strong>${state.deviceLock?.tournamentName || state.tournamentName || FIREBASE_TOURNAMENT_ID}</strong><br>
+      大会ID：<strong>${state.deviceLock?.tournamentId || FIREBASE_TOURNAMENT_ID}</strong><br>
+      本部解除PW：<strong>000000</strong>
+    </div>
+    <div class="utility">
+      <button class="blue" id="v162RegenerateLoginPwBtn" type="button">4桁PWを再生成</button>
+      <button class="ghost" id="v162CopyLoginPwBtn" type="button">ログイン情報をコピー</button>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div class="selectBox">
+        <label>配布メモ用：担当組</label>
+        <select id="v162LoginMemoGroup">${groupOptions}</select>
+      </div>
+      <div class="selectBox">
+        <label>操作</label>
+        <button class="ghost" id="v162CopyGroupLoginMemoBtn" type="button">担当組つきでコピー</button>
+      </div>
+    </div>
+    <p class="small" style="margin-top:10px;">※ PW再生成後はFirebase同期で各端末へ反映されます。すでにログイン済みのスコアラー端末はそのまま使用できます。</p>
+  `;
+  const regen = $('v162RegenerateLoginPwBtn');
+  if (regen) regen.onclick = () => {
+    if (!confirm('ログインPWを再生成しますか？\n\n未ログイン端末は新しいPWでログインします。')) return;
+    v152Normalize();
+    state.deviceLock.loginCode = v151Random4Digit();
+    state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
+    state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
+    saveState();
+    v162RenderLoginManager();
+    v151RenderLoginGate();
+    toast('ログインPWを再生成しました');
+  };
+  const copy = $('v162CopyLoginPwBtn');
+  if (copy) copy.onclick = async () => {
+    const text = v162CurrentLoginInfoText();
+    try { await navigator.clipboard.writeText(text); toast('ログイン情報をコピーしました'); }
+    catch(e) { alert(text); }
+  };
+  const copyGroup = $('v162CopyGroupLoginMemoBtn');
+  if (copyGroup) copyGroup.onclick = async () => {
+    const gid = Number($('v162LoginMemoGroup')?.value || state.groups?.[0]?.id || 0);
+    const group = (state.groups || []).find(g => Number(g.id) === gid);
+    const text = [
+      'PGAスコア入力システム ログイン情報',
+      `大会：${state.deviceLock?.tournamentName || state.tournamentName || FIREBASE_TOURNAMENT_ID}`,
+      `担当組：${group ? group.name : '-'}`,
+      `ログインPW：${state.deviceLock?.loginCode || '----'}`
+    ].join('\n');
+    try { await navigator.clipboard.writeText(text); toast('担当組つきログイン情報をコピーしました'); }
+    catch(e) { alert(text); }
+  };
+}
+const v162OriginalRenderAllScreens = renderAllScreens;
+renderAllScreens = function(){
+  v162OriginalRenderAllScreens();
+  v162RenderLoginManager();
+};
+const v162OriginalRenderRanking = renderRanking;
+renderRanking = function(){
+  v162OriginalRenderRanking();
+  v162RenderLoginManager();
+};
+const v162OriginalSwitchTab = switchTab;
+switchTab = function(target){
+  v162OriginalSwitchTab(target);
+  if (target === 'leaderboard') v162RenderLoginManager();
+};
+const v162OriginalV16ApplyPageMode = v16ApplyPageMode;
+v16ApplyPageMode = function(){
+  v162OriginalV16ApplyPageMode();
+  setTimeout(v162RenderLoginManager, 100);
+};
+window.addEventListener('load', () => setTimeout(v162RenderLoginManager, 900));
+
+/* v16.2 changelog
+   - hq.html にログインPW管理カードを追加
+   - 現在の4桁PW確認、再生成、コピーに対応
+   - 担当組つきコピーで朝の端末配布メモを作成可能
+*/
+
 </script>
 </body>
 </html>
