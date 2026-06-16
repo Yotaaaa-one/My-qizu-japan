@@ -1,6 +1,6 @@
 {
-  "name": "PGA Score v16.4.10 Clean System",
-  "short_name": "PGA Score v16.4.10",
+  "name": "PGA Score v16.4.11 Clean System",
+  "short_name": "PGA Score v16.4.11",
   "start_url": "./index.html?v=1645",
   "scope": "./",
   "display": "standalone",

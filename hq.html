@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score HQ v16.4.10</title>
+  <title>PGA Score HQ v16.4.11</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1172,33 +1172,10 @@
 
   </style>
 
-<style id="v163-force-style">
-/* v16.4.10 physical page separation */
-body.v163-page-login .tabs,
-body.v163-page-monitor .tabs,
-body.v163-page-public .tabs { display:none !important; }
-body.v163-page-login .screen,
-body.v163-page-scorer .screen,
-body.v163-page-hq .screen,
-body.v163-page-monitor .screen,
-body.v163-page-public .screen { display:none !important; }
-body.v163-page-login #scorerScreen,
-body.v163-page-scorer #scorerScreen,
-body.v163-page-hq #leaderboardScreen,
-body.v163-page-monitor #monitorScreen,
-body.v163-page-public #publicScreen { display:block !important; }
-body.v163-page-login #scorerScreen > .card:not(#scorerLoginGate) { display:none !important; }
-body.v163-page-login #scorerLoginGate { display:block !important; }
-body.v163-page-scorer #scorerLoginGate { display:none !important; }
-body.v163-page-hq .scorerOnlyTab, body.v163-page-hq #scorerTab, body.v163-page-hq #monitorTab, body.v163-page-hq #publicTab { display:none !important; }
-body.v163-page-hq #leaderboardTab { display:block !important; }
-body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
-.v163PageBadge { display:inline-flex; margin:12px 14px 0; padding:7px 11px; border-radius:999px; background:#eef7f1; color:#073b24; font-weight:900; border:1px solid #b7e0c2; font-size:12px; }
-</style>
 </head>
 <body class="v163-page-hq">
 <header>
-  <h1>本部管理画面 v16.4.10</h1>
+  <h1>本部管理画面 v16.4.11</h1>
   <p>ログインPW管理・本部復帰・初期データリセット版</p>
 </header>
 
@@ -6265,47 +6242,13 @@ window.addEventListener('load', function(){
 </script>
 
 
-<script id="v163-force-script">
-(function(){
-  const PAGE = "hq";
-  const TARGET = {login:'scorer', scorer:'scorer', hq:'leaderboard', monitor:'monitor', public:'public'}[PAGE] || 'scorer';
-  function apply(){
-    try {
-      document.body.classList.add('v163-page-' + PAGE);
-      if (typeof v16PageName === 'function') window.v16PageName = function(){ return PAGE === 'login' ? 'login' : PAGE; };
-      if (typeof switchTab === 'function') switchTab(TARGET);
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      const id = {login:'scorerScreen', scorer:'scorerScreen', hq:'leaderboardScreen', monitor:'monitorScreen', public:'publicScreen'}[PAGE];
-      const el = document.getElementById(id); if (el) el.classList.add('active');
-      if (PAGE === 'login') {
-        const gate = document.getElementById('scorerLoginGate'); if (gate) gate.style.display='block';
-        document.querySelectorAll('#scorerScreen > .card').forEach(card => { if(card.id !== 'scorerLoginGate') card.style.display='none'; });
-      }
-      if (PAGE === 'scorer') {
-        const gate = document.getElementById('scorerLoginGate'); if (gate) gate.style.display='none';
-      }
-      if (PAGE === 'hq' && typeof v162RenderLoginManager === 'function') v162RenderLoginManager();
-      const badgeId='v163PageBadge';
-      if (!document.getElementById(badgeId)) {
-        const b=document.createElement('div'); b.id=badgeId; b.className='v163PageBadge';
-        b.textContent = 'v16.4.10 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
-        const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
-      }
-    } catch(e) { console.warn('v16.4.10 page force', e); }
-  }
-  window.addEventListener('DOMContentLoaded', apply);
-  window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
-  setTimeout(apply,50);
-})();
-</script>
-
 <script id="v1646-build-stamp">
 (function(){
-  const BUILD='v16.4.10 / clean-start';
+  const BUILD='v16.4.11 / clean-start';
   function applyBuildStamp(){
     try {
       const badge=document.getElementById('v163PageBadge');
-      if (badge && !badge.textContent.includes('v16.4.10')) badge.textContent='v16.4.10 / 本部専用';
+      if (badge && !badge.textContent.includes('v16.4.11')) badge.textContent='v16.4.11 / 本部専用';
       const meta=document.querySelector('meta[name="pga-build"]');
       if(!meta){ const m=document.createElement('meta'); m.name='pga-build'; m.content=BUILD; document.head.appendChild(m); }
     } catch(e){}
@@ -6314,149 +6257,139 @@ window.addEventListener('load', function(){
   window.addEventListener('load', function(){ applyBuildStamp(); setTimeout(applyBuildStamp,500); setTimeout(applyBuildStamp,1500); });
 })();
 </script>
-<!-- v16.4.10 final tab hard-restore: HQ only -->
-<style id="v1649-final-tab-style-hq">
-body.v1649-tabs-hq .screen { display:none !important; }
-body.v1649-tabs-hq #leaderboardScreen.active,
-body.v1649-tabs-hq #monitorScreen.active,
-body.v1649-tabs-hq #publicScreen.active,
-body.v1649-tabs-hq #setupScreen.active { display:block !important; }
-body.v1649-tabs-hq #scorerScreen,
-body.v1649-tabs-hq #scorerHbhScreen,
-body.v1649-tabs-hq #scorerRankingScreen { display:none !important; }
-body.v1649-tabs-hq #leaderboardTab,
-body.v1649-tabs-hq #monitorTab,
-body.v1649-tabs-hq #publicTab,
-body.v1649-tabs-hq #setupTab { display:block !important; }
-body.v1649-tabs-hq #scorerTab,
-body.v1649-tabs-hq #scorerHbhTab,
-body.v1649-tabs-hq #scorerRankingTab,
-body.v1649-tabs-hq .scorerOnlyTab { display:none !important; }
+
+<!-- v16.4.11 click-safe tab controller: HQ -->
+<style id="v16411-click-safe-tabs-hq">
+body.pga-v16411-hq #scorerTab,
+body.pga-v16411-hq #scorerHbhTab,
+body.pga-v16411-hq #scorerRankingTab,
+body.pga-v16411-hq .scorerOnlyTab { display:none !important; }
+
+body.pga-v16411-hq #leaderboardTab,
+body.pga-v16411-hq #monitorTab,
+body.pga-v16411-hq #publicTab,
+body.pga-v16411-hq #setupTab {
+  display:block !important;
+  pointer-events:auto !important;
+  opacity:1 !important;
+}
+
+body.pga-v16411-hq #scorerScreen,
+body.pga-v16411-hq #scorerHbhScreen,
+body.pga-v16411-hq #scorerRankingScreen {
+  display:none !important;
+}
+
+body.pga-v16411-hq #leaderboardScreen,
+body.pga-v16411-hq #monitorScreen,
+body.pga-v16411-hq #publicScreen,
+body.pga-v16411-hq #setupScreen {
+  display:none !important;
+}
+
+body.pga-v16411-hq[data-tab="leaderboard"] #leaderboardScreen,
+body.pga-v16411-hq[data-tab="monitor"] #monitorScreen,
+body.pga-v16411-hq[data-tab="public"] #publicScreen,
+body.pga-v16411-hq[data-tab="setup"] #setupScreen {
+  display:block !important;
+}
 </style>
-<script id="v1649-final-tab-script-hq">
+<script id="v16411-click-safe-tabs-hq">
 (function(){
-  const VERSION='v16.4.10';
-  const tabMap={
-    leaderboard:{tab:'leaderboardTab',screen:'leaderboardScreen',render:function(){ if(typeof renderRanking==='function') renderRanking(); if(typeof renderNotices==='function') renderNotices(); if(typeof renderPaceStatus==='function') renderPaceStatus(); if(typeof renderStartControl==='function') renderStartControl(); if(typeof v162RenderLoginManager==='function') v162RenderLoginManager(); }},
-    monitor:{tab:'monitorTab',screen:'monitorScreen',render:function(){ if(typeof renderMonitor==='function') renderMonitor(); }},
-    public:{tab:'publicTab',screen:'publicScreen',render:function(){ if(typeof renderPublicLeaderboard==='function') renderPublicLeaderboard(); }},
-    setup:{tab:'setupTab',screen:'setupScreen',render:function(){ if(typeof renderSetup==='function') renderSetup(); if(typeof v162RenderLoginManager==='function') v162RenderLoginManager(); }}
+  const VERSION = 'v16.4.11';
+  const TAB_MAP = {
+    leaderboard: { tab:'leaderboardTab', screen:'leaderboardScreen', render:function(){ if (typeof renderRanking === 'function') renderRanking(); if (typeof renderNotices === 'function') renderNotices(); if (typeof renderPaceStatus === 'function') renderPaceStatus(); if (typeof renderStartControl === 'function') renderStartControl(); if (typeof v162RenderLoginManager === 'function') v162RenderLoginManager(); } },
+    monitor: { tab:'monitorTab', screen:'monitorScreen', render:function(){ if (typeof renderMonitor === 'function') renderMonitor(); } },
+    public: { tab:'publicTab', screen:'publicScreen', render:function(){ if (typeof renderPublicLeaderboard === 'function') renderPublicLeaderboard(); } },
+    setup: { tab:'setupTab', screen:'setupScreen', render:function(){ if (typeof renderTournamentManager === 'function') renderTournamentManager(); if (typeof renderDeviceGroupList === 'function') renderDeviceGroupList(); if (typeof renderGroupQrList === 'function') renderGroupQrList(); if (typeof renderGroupUrls === 'function') renderGroupUrls(); if (typeof renderParInput === 'function') renderParInput(); } }
   };
+  const TAB_IDS = Object.fromEntries(Object.entries(TAB_MAP).map(([key,v]) => [v.tab,key]));
+  const ALL_SCREENS = ['scorerScreen','scorerHbhScreen','scorerRankingScreen','leaderboardScreen','monitorScreen','publicScreen','setupScreen'];
+  const ALL_TABS = ['scorerTab','scorerHbhTab','scorerRankingTab','leaderboardTab','monitorTab','publicTab','setupTab'];
+  let current = sessionStorage.getItem('pga_v16411_hq_tab') || 'leaderboard';
+
   function $(id){ return document.getElementById(id); }
-  function applyShell(){
-    document.body.classList.add('v1649-tabs-hq','v163-page-hq');
-    ['scorerTab','scorerHbhTab','scorerRankingTab'].forEach(id=>{ const el=$(id); if(el) el.style.display='none'; });
-    ['leaderboardTab','monitorTab','publicTab','setupTab'].forEach(id=>{ const el=$(id); if(el) el.style.display='block'; });
-    const badge=$('v163PageBadge'); if(badge) badge.textContent=VERSION+' / 本部専用';
-    const h=document.querySelector('header h1'); if(h) h.textContent='本部管理画面 v16.4.10';
-  }
-  function activate(target){
-    if(!tabMap[target]) target='leaderboard';
-    applyShell();
-    Object.values(tabMap).forEach(x=>{ const t=$(x.tab); if(t) t.classList.remove('active'); const s=$(x.screen); if(s){ s.classList.remove('active'); s.style.display='none'; }});
-    ['scorerScreen','scorerHbhScreen','scorerRankingScreen'].forEach(id=>{ const s=$(id); if(s){ s.classList.remove('active'); s.style.display='none'; }});
-    const item=tabMap[target];
-    const tab=$(item.tab); if(tab) tab.classList.add('active');
-    const screen=$(item.screen); if(screen){ screen.classList.add('active'); screen.style.display='block'; }
-    try{ item.render(); }catch(e){ console.warn('v16.4.10 hq render',target,e); }
-    sessionStorage.setItem('pga_v1649_hq_tab', target);
-  }
-  window.v1649ActivateHqTab=activate;
-  const oldSwitch=window.switchTab;
-  window.switchTab=function(target){
-    if(tabMap[target]) { activate(target); return; }
-    if(['scorer','scorerHbh','scorerRanking'].includes(target)) { activate(sessionStorage.getItem('pga_v1649_hq_tab')||'leaderboard'); return; }
-    if(typeof oldSwitch==='function') return oldSwitch.apply(this,arguments);
-  };
-  [['leaderboardTab','leaderboard'],['monitorTab','monitor'],['publicTab','public'],['setupTab','setup']].forEach(([id,target])=>{
-    const el=$(id); if(!el) return;
-    el.onclick=function(e){ if(e){ e.preventDefault(); e.stopPropagation(); } activate(target); return false; };
-    el.addEventListener('click',function(e){ e.preventDefault(); e.stopImmediatePropagation(); activate(target); },true);
-  });
-  function init(){ activate(sessionStorage.getItem('pga_v1649_hq_tab') || 'leaderboard'); }
-  window.addEventListener('DOMContentLoaded',()=>setTimeout(init,0));
-  window.addEventListener('load',()=>{ init(); setTimeout(init,400); setTimeout(init,1200); });
-  setTimeout(init,100);
-})();
-</script>
 
-
-<!-- v16.4.10 tab specificity fix: HQ -->
-<style id="v16410-tab-specificity-fix-hq">
-body.pga-v16410-hq #scorerScreen,
-body.pga-v16410-hq #scorerHbhScreen,
-body.pga-v16410-hq #scorerRankingScreen,
-body.pga-v16410-hq #leaderboardScreen,
-body.pga-v16410-hq #monitorScreen,
-body.pga-v16410-hq #publicScreen,
-body.pga-v16410-hq #setupScreen { display:none !important; }
-body.pga-v16410-hq #leaderboardScreen.pga-v16410-active,
-body.pga-v16410-hq #monitorScreen.pga-v16410-active,
-body.pga-v16410-hq #publicScreen.pga-v16410-active,
-body.pga-v16410-hq #setupScreen.pga-v16410-active { display:block !important; }
-body.pga-v16410-hq #leaderboardTab,
-body.pga-v16410-hq #monitorTab,
-body.pga-v16410-hq #publicTab,
-body.pga-v16410-hq #setupTab { display:block !important; }
-body.pga-v16410-hq #scorerTab,
-body.pga-v16410-hq #scorerHbhTab,
-body.pga-v16410-hq #scorerRankingTab,
-body.pga-v16410-hq .scorerOnlyTab { display:none !important; }
-</style>
-<script id="v16410-tab-specificity-fix-hq">
-(function(){
-  const VERSION='V16.4.10';
-  const allowed={
-    leaderboard:{tab:'leaderboardTab',screen:'leaderboardScreen',render:function(){ if(typeof renderRanking==='function') renderRanking(); if(typeof renderNotices==='function') renderNotices(); if(typeof renderPaceStatus==='function') renderPaceStatus(); if(typeof renderStartControl==='function') renderStartControl(); if(typeof v162RenderLoginManager==='function') v162RenderLoginManager(); }},
-    monitor:{tab:'monitorTab',screen:'monitorScreen',render:function(){ if(typeof renderMonitor==='function') renderMonitor(); }},
-    public:{tab:'publicTab',screen:'publicScreen',render:function(){ if(typeof renderPublicLeaderboard==='function') renderPublicLeaderboard(); }},
-    setup:{tab:'setupTab',screen:'setupScreen',render:function(){ if(typeof renderSetup==='function') renderSetup(); if(typeof v162RenderLoginManager==='function') v162RenderLoginManager(); }}
-  };
-  const screens=['scorerScreen','scorerHbhScreen','scorerRankingScreen','leaderboardScreen','monitorScreen','publicScreen','setupScreen'];
-  const tabs=['scorerTab','scorerHbhTab','scorerRankingTab','leaderboardTab','monitorTab','publicTab','setupTab'];
-  let current=sessionStorage.getItem('pga_v16410_hq_tab')||'leaderboard';
-  let busy=false;
-  function $(id){return document.getElementById(id);}
   function shell(){
-    document.body.classList.add('pga-v16410-hq','v163-page-hq');
-    document.body.classList.remove('pga-v16410-scorer','v16-login-page');
-    ['scorerTab','scorerHbhTab','scorerRankingTab'].forEach(id=>{const el=$(id); if(el) el.style.display='none';});
-    ['leaderboardTab','monitorTab','publicTab','setupTab'].forEach(id=>{const el=$(id); if(el) el.style.display='block';});
-    const badge=$('v163PageBadge'); if(badge) badge.textContent=VERSION+' / 本部専用';
-    const h=document.querySelector('header h1'); if(h) h.textContent='本部管理画面 v16.4.10';
+    document.body.classList.add('pga-v16411-hq');
+    document.body.classList.remove('v16-login-page','v163-page-login','v163-page-scorer','v163-page-monitor','v163-page-public');
+    document.body.dataset.tab = current;
+
+    ['scorerTab','scorerHbhTab','scorerRankingTab'].forEach(id => { const el=$(id); if(el) el.style.display='none'; });
+    ['leaderboardTab','monitorTab','publicTab','setupTab'].forEach(id => {
+      const el=$(id);
+      if(el){ el.style.display='block'; el.disabled=false; el.style.pointerEvents='auto'; }
+    });
+
+    const badge = $('v163PageBadge'); if (badge) badge.textContent = VERSION + ' / 本部専用';
+    const h = document.querySelector('header h1'); if (h) h.textContent = '本部管理画面 v16.4.11';
   }
-  function paint(target, doRender){
-    if(!allowed[target]) target='leaderboard';
-    current=target;
-    busy=true;
+
+  function activate(target, doRender){
+    if (!TAB_MAP[target]) target = 'leaderboard';
+    current = target;
+    sessionStorage.setItem('pga_v16411_hq_tab', current);
     shell();
-    screens.forEach(id=>{const el=$(id); if(el){el.classList.remove('active','pga-v16410-active'); el.style.display='none';}});
-    tabs.forEach(id=>{const el=$(id); if(el) el.classList.remove('active');});
-    const item=allowed[target];
-    const tab=$(item.tab); if(tab) tab.classList.add('active');
-    const screen=$(item.screen); if(screen){screen.classList.add('active','pga-v16410-active'); screen.style.display='block';}
-    sessionStorage.setItem('pga_v16410_hq_tab',target);
-    if(doRender!==false){try{item.render();}catch(e){console.warn('v16.4.10 hq render',target,e);}}
-    busy=false;
+
+    ALL_SCREENS.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      el.classList.remove('active');
+      el.style.display = 'none';
+    });
+    ALL_TABS.forEach(id => {
+      const el = $(id);
+      if (el) el.classList.remove('active');
+    });
+
+    const item = TAB_MAP[current];
+    const tab = $(item.tab);
+    const screen = $(item.screen);
+    if (tab) tab.classList.add('active');
+    if (screen) { screen.classList.add('active'); screen.style.display='block'; }
+
+    if (doRender !== false) {
+      try { item.render(); } catch(e) { console.warn('v16.4.11 hq render', current, e); }
+    }
   }
-  function activate(target){ paint(target,true); return false; }
-  window.pgaV16410ActivateHqTab=activate;
-  const oldSwitch=window.switchTab;
-  window.switchTab=function(target){
-    if(allowed[target]) return activate(target);
-    if(['scorer','scorerHbh','scorerRanking'].includes(target)) return activate(current);
-    if(typeof oldSwitch==='function') return oldSwitch.apply(this,arguments);
+
+  function handleClick(e){
+    const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!btn || !TAB_IDS[btn.id]) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    activate(TAB_IDS[btn.id], true);
+  }
+
+  window.pgaV16411ActivateHqTab = activate;
+  const oldSwitch = window.switchTab;
+  window.switchTab = function(target){
+    if (TAB_MAP[target]) { activate(target, true); return; }
+    if (['scorer','scorerHbh','scorerRanking'].includes(target)) { activate(current, false); return; }
+    if (typeof oldSwitch === 'function') return oldSwitch.apply(this, arguments);
   };
-  [['leaderboardTab','leaderboard'],['monitorTab','monitor'],['publicTab','public'],['setupTab','setup']].forEach(([id,target])=>{
-    function bind(){const el=$(id); if(!el||el.dataset.v16410Bound)return; el.dataset.v16410Bound='1'; el.onclick=function(e){if(e){e.preventDefault();e.stopPropagation();} return activate(target);}; el.addEventListener('click',function(e){e.preventDefault(); e.stopImmediatePropagation(); activate(target);},true);}
-    bind(); setTimeout(bind,400); setTimeout(bind,1500);
-  });
-  function enforce(){ if(!busy) paint(current,false); }
-  function init(){ paint(current,true); }
-  window.addEventListener('DOMContentLoaded',()=>setTimeout(init,0));
-  window.addEventListener('load',()=>{ init(); setTimeout(enforce,600); setTimeout(enforce,1600); setTimeout(enforce,3200); });
-  setTimeout(init,50); setTimeout(enforce,1200); setTimeout(enforce,2500);
-  try{ new MutationObserver(()=>{ if(!busy) requestAnimationFrame(enforce); }).observe(document.body,{attributes:true,subtree:true,attributeFilter:['class','style']}); }catch(e){}
+
+  function bind(){
+    document.removeEventListener('click', handleClick, true);
+    document.addEventListener('click', handleClick, true);
+    Object.entries(TAB_IDS).forEach(([id,target]) => {
+      const el = $(id);
+      if (!el) return;
+      el.disabled = false;
+      el.style.pointerEvents = 'auto';
+      el.onclick = function(ev){ if(ev){ev.preventDefault(); ev.stopPropagation();} activate(target, true); return false; };
+    });
+  }
+
+  function init(){
+    bind();
+    activate(current, true);
+  }
+
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(init, 0); });
+  window.addEventListener('load', function(){ init(); setTimeout(init, 350); setTimeout(function(){ activate(current,false); bind(); }, 1600); });
+  setTimeout(init, 100);
 })();
 </script>
 
