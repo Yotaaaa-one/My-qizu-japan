@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Scorer v16.4.2.2</title>
+  <title>PGA Score Scorer v16.4.3</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1173,7 +1173,7 @@
   </style>
 
 <style id="v163-force-style">
-/* v16.4.2.2 physical page separation */
+/* v16.4.3 physical page separation */
 body.v163-page-login .tabs,
 body.v163-page-monitor .tabs,
 body.v163-page-public .tabs { display:none !important; }
@@ -1198,7 +1198,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 </head>
 <body class="v163-page-scorer">
 <header>
-  <h1>スコアラー画面 v16.4.2.2</h1>
+  <h1>スコアラー画面 v16.4.3</h1>
   <p>スコア入力専用</p>
 </header>
 
@@ -6092,7 +6092,7 @@ function v16ApplyPageMode(){
     return;
   }
   if (page === 'scorer') {
-    if (!isGroupFixed()) { setTimeout(()=>v16Go('index.html'), 50); return; }
+    if (!isGroupFixed()) { if (typeof v1643ApplyDeviceLock === 'function' && v1643ApplyDeviceLock()) { /* restored */ } else { console.warn('v16.4.3: scorer lock not found, staying on scorer for recovery'); } }
     document.body.classList.add('v16-scorer-page');
     document.querySelectorAll('.hqOnly').forEach(v16Hide);
     switchTab('scorer');
@@ -6286,7 +6286,7 @@ window.addEventListener('load', function(){
         b.textContent = 'V16.4.1.1 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
         const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
       }
-    } catch(e) { console.warn('v16.4.2.2 page force', e); }
+    } catch(e) { console.warn('v16.4.3 page force', e); }
   }
   window.addEventListener('DOMContentLoaded', apply);
   window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
@@ -6294,47 +6294,152 @@ window.addEventListener('load', function(){
 })();
 </script>
 
-<script id="v1642-scorer-local-lock">
+
+<script id="v1643-lock-persistence-fix">
 (function(){
-  const LOCK_KEY = 'pga_score_scorer_lock_v1642';
-  function readLock(){ try { return JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); } catch(e){ return null; } }
-  function applyLock(){
-    const lock = readLock();
-    if (!lock || !lock.locked) return;
+  const VERSION = 'v16.4.3';
+  const LOCK_KEY = 'pga_score_v164_device_lock';
+  const STATE_KEY = (typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'golf_score_prototype_v12_2');
+  function pageName(){
+    const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+    if (p === 'index.html' || p === '') return 'login';
+    if (p.includes('scorer')) return 'scorer';
+    if (p.includes('hq')) return 'hq';
+    if (p.includes('monitor')) return 'monitor';
+    if (p.includes('public')) return 'public';
+    return 'login';
+  }
+  function normId(v){ const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; }
+  function getLock(){
+    try { return JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); } catch(e) { return null; }
+  }
+  function saveLockFromState(){
     try {
-      if (typeof TOURNAMENT_ID_STORAGE_KEY !== 'undefined' && lock.tournamentId) localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, lock.tournamentId);
-      if (window.state) {
-        state.deviceGroupId = Number(lock.groupId);
-        state.selectedGroupId = Number(lock.groupId);
-        if (!state.selectedHole) state.selectedHole = Number(lock.startHole || 1);
-        if (!state.deviceLock) state.deviceLock = {};
-        state.deviceLock = Object.assign({}, state.deviceLock, {
-          loginCode: lock.loginCode,
-          unlockPassword: '000000',
-          lockedAt: lock.lockedAt,
-          lockedBy: lock.version || 'v16.4.2',
-          tournamentId: lock.tournamentId,
-          tournamentName: lock.tournamentName
-        });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      }
-      const notice = document.getElementById('fixedGroupNotice');
-      if (notice) {
-        notice.textContent = '担当組固定：' + (lock.groupName || ('第' + lock.groupId + '組'));
-        notice.classList.add('show');
+      if (!window.state) return;
+      const gid = normId(state.deviceGroupId || state.selectedGroupId);
+      if (!gid) return;
+      const group = (state.groups || []).find(g => Number(g.id) === gid);
+      const lock = {
+        version: VERSION,
+        deviceGroupId: gid,
+        selectedGroupId: gid,
+        selectedHole: state.selectedHole || group?.startHole || 1,
+        tournamentId: (state.deviceLock && state.deviceLock.tournamentId) || (typeof FIREBASE_TOURNAMENT_ID !== 'undefined' ? FIREBASE_TOURNAMENT_ID : ''),
+        tournamentName: (state.deviceLock && state.deviceLock.tournamentName) || '',
+        lockedAt: (state.deviceLock && state.deviceLock.lockedAt) || new Date().toISOString(),
+        loginCode: (state.deviceLock && state.deviceLock.loginCode) || ''
+      };
+      localStorage.setItem(LOCK_KEY, JSON.stringify(lock));
+    } catch(e) { console.warn('v16.4.3 save lock failed', e); }
+  }
+  function applyLockToState(){
+    try {
+      const lock = getLock();
+      if (!lock || !normId(lock.deviceGroupId) || !window.state) return false;
+      const gid = normId(lock.deviceGroupId);
+      const group = (state.groups || []).find(g => Number(g.id) === gid);
+      state.deviceGroupId = gid;
+      state.selectedGroupId = gid;
+      state.selectedHole = state.selectedHole || lock.selectedHole || group?.startHole || 1;
+      if (!state.deviceLock) state.deviceLock = {};
+      state.deviceLock.lockedAt = state.deviceLock.lockedAt || lock.lockedAt || new Date().toISOString();
+      state.deviceLock.lockedBy = VERSION;
+      state.deviceLock.unlockPassword = '000000';
+      state.deviceLock.tournamentId = lock.tournamentId || state.deviceLock.tournamentId || (typeof FIREBASE_TOURNAMENT_ID !== 'undefined' ? FIREBASE_TOURNAMENT_ID : '');
+      state.deviceLock.tournamentName = lock.tournamentName || state.deviceLock.tournamentName || state.deviceLock.tournamentId;
+      if (lock.loginCode && !state.deviceLock.loginCode) state.deviceLock.loginCode = lock.loginCode;
+      localStorage.setItem(STATE_KEY, JSON.stringify(state));
+      return true;
+    } catch(e) { console.warn('v16.4.3 apply lock failed', e); return false; }
+  }
+  function clearLock(){
+    try { localStorage.removeItem(LOCK_KEY); } catch(e) {}
+  }
+  window.v1643SaveDeviceLock = saveLockFromState;
+  window.v1643ApplyDeviceLock = applyLockToState;
+  window.v1643ClearDeviceLock = clearLock;
+
+  const page = pageName();
+  if (page === 'login') {
+    // ログイン成功処理の直後に、メインstateとは別の端末ロックキーにも保存する。
+    function installLoginPatch(){
+      const old = window.v164LoginAndRedirect;
+      if (!old || old.v1643Wrapped) return;
+      const wrapped = function(){
+        const beforeHref = location.href;
+        const result = old.apply(this, arguments);
+        setTimeout(function(){
+          // old側でstate.deviceGroupIdを設定した直後に保存する。
+          saveLockFromState();
+        }, 50);
+        setTimeout(saveLockFromState, 180);
+        return result;
+      };
+      wrapped.v1643Wrapped = true;
+      window.v164LoginAndRedirect = wrapped;
+      const btn = document.getElementById('scorerLoginLockBtn');
+      if (btn) btn.onclick = function(ev){ ev.preventDefault(); wrapped(); return false; };
+      const badge = document.getElementById('v163PageBadge');
+      if (badge) badge.textContent = VERSION + ' / ログイン専用';
+    }
+    window.addEventListener('DOMContentLoaded', function(){ setTimeout(installLoginPatch, 350); });
+    window.addEventListener('load', function(){ installLoginPatch(); setTimeout(installLoginPatch, 900); setTimeout(installLoginPatch, 1800); });
+    setTimeout(installLoginPatch, 700);
+  }
+
+  if (page === 'scorer') {
+    // scorer.html移動直後、Firebaseの大会stateにdeviceGroupIdが無くても端末ロックを維持する。
+    applyLockToState();
+    if (typeof window.fixedGroupId === 'function') {
+      const oldFixed = window.fixedGroupId;
+      window.fixedGroupId = function(){
+        const fromState = oldFixed();
+        if (fromState) return fromState;
+        const lock = getLock();
+        return lock && normId(lock.deviceGroupId) ? normId(lock.deviceGroupId) : null;
+      };
+    }
+    if (typeof window.isGroupFixed === 'function') {
+      window.isGroupFixed = function(){
+        if (typeof window.fixedGroupId === 'function' && window.fixedGroupId()) return true;
+        const lock = getLock();
+        return !!(lock && normId(lock.deviceGroupId));
+      };
+    }
+    const originalApply = window.v16ApplyPageMode;
+    if (typeof originalApply === 'function') {
+      window.v16ApplyPageMode = function(){
+        applyLockToState();
+        return originalApply.apply(this, arguments);
+      };
+    }
+    const originalRender = window.renderAllScreens;
+    if (typeof originalRender === 'function') {
+      window.renderAllScreens = function(){
+        applyLockToState();
+        const r = originalRender.apply(this, arguments);
+        applyLockToState();
+        return r;
+      };
+    }
+    function installScorerUnlockClear(){
+      const btn = document.getElementById('v161UnlockBtn');
+      if (btn && !btn.dataset.v1643Clear) {
+        btn.dataset.v1643Clear = '1';
+        const oldClick = btn.onclick;
+        btn.onclick = function(ev){
+          clearLock();
+          if (typeof oldClick === 'function') return oldClick.call(this, ev);
+        };
       }
       const badge = document.getElementById('v163PageBadge');
-      if (badge) badge.textContent = 'V16.4.2 / スコアラー専用';
-    } catch(e) { console.warn('v16.4.2 scorer lock apply failed', e); }
+      if (badge) badge.textContent = VERSION + ' / スコアラー専用';
+    }
+    window.addEventListener('DOMContentLoaded', function(){ applyLockToState(); setTimeout(installScorerUnlockClear, 500); });
+    window.addEventListener('load', function(){ applyLockToState(); setTimeout(applyLockToState, 200); setTimeout(applyLockToState, 700); setTimeout(installScorerUnlockClear, 1200); });
+    setTimeout(applyLockToState, 50);
+    setTimeout(applyLockToState, 300);
   }
-  const oldRenderAll = window.renderAllScreens;
-  if (typeof oldRenderAll === 'function' && !window.v1642RenderPatched) {
-    window.v1642RenderPatched = true;
-    window.renderAllScreens = function(){ const r = oldRenderAll.apply(this, arguments); setTimeout(applyLock, 0); return r; };
-  }
-  window.addEventListener('DOMContentLoaded', applyLock);
-  window.addEventListener('load', function(){ applyLock(); setTimeout(applyLock,300); setTimeout(applyLock,1200); setTimeout(applyLock,2400); });
-  setInterval(applyLock, 3000);
 })();
 </script>
 

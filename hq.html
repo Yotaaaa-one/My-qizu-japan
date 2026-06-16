@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score HQ v16.4.2.2</title>
+  <title>PGA Score HQ v16.4.3</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1173,7 +1173,7 @@
   </style>
 
 <style id="v163-force-style">
-/* v16.4.2.2 physical page separation */
+/* v16.4.3 physical page separation */
 body.v163-page-login .tabs,
 body.v163-page-monitor .tabs,
 body.v163-page-public .tabs { display:none !important; }
@@ -1198,7 +1198,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 </head>
 <body class="v163-page-hq">
 <header>
-  <h1>本部管理画面 v16.4.2.2</h1>
+  <h1>本部管理画面 v16.4.3</h1>
   <p>ログインPW管理・通知管理・プレー復帰</p>
 </header>
 
@@ -6291,88 +6291,12 @@ window.addEventListener('load', function(){
         b.textContent = 'V16.4.1.1 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
         const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
       }
-    } catch(e) { console.warn('v16.4.2.2 page force', e); }
+    } catch(e) { console.warn('v16.4.3 page force', e); }
   }
   window.addEventListener('DOMContentLoaded', apply);
   window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
   setTimeout(apply,50);
 })();
 </script>
-
-<script id="v1642-hq-login-sync">
-(function(){
-  const VERSION = 'v16.4.2';
-  function $(id){ return document.getElementById(id); }
-  function norm4(value){ return String(value || '').replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/[^0-9]/g,'').slice(0,4); }
-  function ensureCode(){
-    try {
-      if (typeof v152Normalize === 'function') v152Normalize();
-      if (!state.deviceLock) state.deviceLock = {};
-      if (!norm4(state.deviceLock.loginCode)) state.deviceLock.loginCode = (typeof v151Random4Digit === 'function' ? v151Random4Digit() : String(Math.floor(1000+Math.random()*9000)));
-      state.deviceLock.loginCode = norm4(state.deviceLock.loginCode);
-      state.deviceLock.unlockPassword = '000000';
-      state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
-      state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
-    } catch(e) { console.warn('v16.4.2 ensureCode failed', e); }
-  }
-  async function pushLoginCodeNow(){
-    try {
-      ensureCode();
-      if (!window.firebase) return false;
-      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-      const db = firebase.firestore();
-      const updatedAt = new Date().toISOString();
-      await db.collection('tournaments').doc(FIREBASE_TOURNAMENT_ID).set({
-        state: JSON.parse(JSON.stringify(state)),
-        updatedAt,
-        source: VERSION + '-hq-login-sync'
-      }, {merge:true});
-      if (typeof toast === 'function') toast('ログインPWをFirebaseへ同期しました');
-      return true;
-    } catch(e) {
-      console.warn('v16.4.2 push login code failed', e);
-      if (typeof toast === 'function') toast('PW同期に失敗しました');
-      return false;
-    }
-  }
-  function addSyncStatus(){
-    const card = $('v162LoginManagerCard');
-    if (!card || $('v1642LoginSyncStatus')) return;
-    const el = document.createElement('div');
-    el.id = 'v1642LoginSyncStatus';
-    el.className = 'loginStatusBox';
-    el.style.marginTop = '10px';
-    el.innerHTML = 'V16.4.2：このPWがログイン画面の認証PWです。大会ID：<strong>' + FIREBASE_TOURNAMENT_ID + '</strong>';
-    card.appendChild(el);
-  }
-  const oldRender = window.v162RenderLoginManager;
-  if (typeof oldRender === 'function' && !window.v1642HqRenderPatched) {
-    window.v1642HqRenderPatched = true;
-    window.v162RenderLoginManager = function(){
-      ensureCode();
-      const r = oldRender.apply(this, arguments);
-      addSyncStatus();
-      const regen = $('v162RegenerateLoginPwBtn');
-      if (regen && !regen.dataset.v1642Bound) {
-        regen.dataset.v1642Bound = '1';
-        regen.onclick = async function(){
-          if (!confirm('ログインPWを再生成しますか？\n\n未ログイン端末は新しいPWでログインします。')) return;
-          ensureCode();
-          state.deviceLock.loginCode = (typeof v151Random4Digit === 'function' ? v151Random4Digit() : String(Math.floor(1000+Math.random()*9000)));
-          state.deviceLock.loginCode = norm4(state.deviceLock.loginCode);
-          state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
-          state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          await pushLoginCodeNow();
-          window.v162RenderLoginManager();
-        };
-      }
-      return r;
-    };
-  }
-  window.addEventListener('load', function(){ ensureCode(); setTimeout(function(){ if (typeof v162RenderLoginManager === 'function') v162RenderLoginManager(); pushLoginCodeNow(); }, 900); });
-})();
-</script>
-
 </body>
 </html>
