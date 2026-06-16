@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Login v16.4.3</title>
+  <title>PGA Score Login v16.4.4.3</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1173,7 +1173,7 @@
   </style>
 
 <style id="v163-force-style">
-/* v16.4.3 physical page separation */
+/* v16.4.4.3 physical page separation */
 body.v163-page-login .tabs,
 body.v163-page-monitor .tabs,
 body.v163-page-public .tabs { display:none !important; }
@@ -1198,7 +1198,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 </head>
 <body class="v163-page-login">
 <header>
-  <h1>スコアラー入力システム v16.4.3</h1>
+  <h1>スコアラー入力システム v16.4.4.3</h1>
   <p>PWA・ページ完全分離・ログイン専用</p>
 </header>
 
@@ -6288,7 +6288,7 @@ window.addEventListener('load', function(){
         b.textContent = 'V16.4.1.1 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
         const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
       }
-    } catch(e) { console.warn('v16.4.3 page force', e); }
+    } catch(e) { console.warn('v16.4.4.3 page force', e); }
   }
   window.addEventListener('DOMContentLoaded', apply);
   window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
@@ -6298,7 +6298,7 @@ window.addEventListener('load', function(){
 
 <script id="v1641-login-fix">
 (function(){
-  const VERSION = 'v16.4.3';
+  const VERSION = 'v16.4.4.3';
   function $(id){ return document.getElementById(id); }
   function norm4(value){
     return String(value || '')
@@ -6339,7 +6339,7 @@ window.addEventListener('load', function(){
         return true;
       }
     } catch(e) {
-      console.warn('v16.4.3 login remote pull failed', e);
+      console.warn('v16.4.4.3 login remote pull failed', e);
     }
     return false;
   }
@@ -6417,7 +6417,7 @@ window.addEventListener('load', function(){
 
 <script id="v1643-lock-persistence-fix">
 (function(){
-  const VERSION = 'v16.4.3';
+  const VERSION = 'v16.4.4';
   const LOCK_KEY = 'pga_score_v164_device_lock';
   const STATE_KEY = (typeof STORAGE_KEY !== 'undefined' ? STORAGE_KEY : 'golf_score_prototype_v12_2');
   function pageName(){
@@ -6450,7 +6450,7 @@ window.addEventListener('load', function(){
         loginCode: (state.deviceLock && state.deviceLock.loginCode) || ''
       };
       localStorage.setItem(LOCK_KEY, JSON.stringify(lock));
-    } catch(e) { console.warn('v16.4.3 save lock failed', e); }
+    } catch(e) { console.warn('v16.4.4 save lock failed', e); }
   }
   function applyLockToState(){
     try {
@@ -6470,7 +6470,7 @@ window.addEventListener('load', function(){
       if (lock.loginCode && !state.deviceLock.loginCode) state.deviceLock.loginCode = lock.loginCode;
       localStorage.setItem(STATE_KEY, JSON.stringify(state));
       return true;
-    } catch(e) { console.warn('v16.4.3 apply lock failed', e); return false; }
+    } catch(e) { console.warn('v16.4.4 apply lock failed', e); return false; }
   }
   function clearLock(){
     try { localStorage.removeItem(LOCK_KEY); } catch(e) {}
@@ -6483,33 +6483,22 @@ window.addEventListener('load', function(){
   if (page === 'login') {
     // ログイン成功処理の直後に、メインstateとは別の端末ロックキーにも保存する。
     function installLoginPatch(){
+      const old = window.v164LoginAndRedirect;
+      if (!old || old.v1643Wrapped) return;
+      const wrapped = function(){
+        const beforeHref = location.href;
+        const result = old.apply(this, arguments);
+        setTimeout(function(){
+          // old側でstate.deviceGroupIdを設定した直後に保存する。
+          saveLockFromState();
+        }, 50);
+        setTimeout(saveLockFromState, 180);
+        return result;
+      };
+      wrapped.v1643Wrapped = true;
+      window.v164LoginAndRedirect = wrapped;
       const btn = document.getElementById('scorerLoginLockBtn');
-      if (btn && !btn.dataset.v1643LockBackup) {
-        btn.dataset.v1643LockBackup = '1';
-        // 既存のV16.4.2認証処理はそのまま使い、成功直後のstateを別キーにも退避する。
-        btn.addEventListener('click', function(){
-          setTimeout(saveLockFromState, 80);
-          setTimeout(saveLockFromState, 180);
-          setTimeout(saveLockFromState, 260);
-          setTimeout(saveLockFromState, 500);
-          setTimeout(saveLockFromState, 1000);
-          setTimeout(saveLockFromState, 2000);
-        });
-      }
-      const input = document.getElementById('v16LoginPasswordInput');
-      if (input && !input.dataset.v1643EnterBackup) {
-        input.dataset.v1643EnterBackup = '1';
-        input.addEventListener('keydown', function(e){
-          if (e.key === 'Enter') {
-            setTimeout(saveLockFromState, 80);
-            setTimeout(saveLockFromState, 180);
-            setTimeout(saveLockFromState, 260);
-            setTimeout(saveLockFromState, 500);
-            setTimeout(saveLockFromState, 1000);
-            setTimeout(saveLockFromState, 2000);
-          }
-        });
-      }
+      if (btn) btn.onclick = function(ev){ ev.preventDefault(); wrapped(); return false; };
       const badge = document.getElementById('v163PageBadge');
       if (badge) badge.textContent = VERSION + ' / ログイン専用';
     }
