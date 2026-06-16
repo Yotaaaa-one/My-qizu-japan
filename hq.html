@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score HQ v16.4.11</title>
+  <title>PGA Score HQ v16.4.13</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1175,7 +1175,7 @@
 </head>
 <body class="v163-page-hq">
 <header>
-  <h1>本部管理画面 v16.4.11</h1>
+  <h1>本部管理画面 v16.4.13</h1>
   <p>ログインPW管理・本部復帰・初期データリセット版</p>
 </header>
 
@@ -6244,11 +6244,11 @@ window.addEventListener('load', function(){
 
 <script id="v1646-build-stamp">
 (function(){
-  const BUILD='v16.4.11 / clean-start';
+  const BUILD='v16.4.13 / clean-start';
   function applyBuildStamp(){
     try {
       const badge=document.getElementById('v163PageBadge');
-      if (badge && !badge.textContent.includes('v16.4.11')) badge.textContent='v16.4.11 / 本部専用';
+      if (badge && !badge.textContent.includes('v16.4.13')) badge.textContent='v16.4.13 / 本部専用';
       const meta=document.querySelector('meta[name="pga-build"]');
       if(!meta){ const m=document.createElement('meta'); m.name='pga-build'; m.content=BUILD; document.head.appendChild(m); }
     } catch(e){}
@@ -6258,7 +6258,7 @@ window.addEventListener('load', function(){
 })();
 </script>
 
-<!-- v16.4.11 click-safe tab controller: HQ -->
+<!-- v16.4.13 click-safe tab controller: HQ -->
 <style id="v16411-click-safe-tabs-hq">
 body.pga-v16411-hq #scorerTab,
 body.pga-v16411-hq #scorerHbhTab,
@@ -6296,7 +6296,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
 </style>
 <script id="v16411-click-safe-tabs-hq">
 (function(){
-  const VERSION = 'v16.4.11';
+  const VERSION = 'v16.4.13';
   const TAB_MAP = {
     leaderboard: { tab:'leaderboardTab', screen:'leaderboardScreen', render:function(){ if (typeof renderRanking === 'function') renderRanking(); if (typeof renderNotices === 'function') renderNotices(); if (typeof renderPaceStatus === 'function') renderPaceStatus(); if (typeof renderStartControl === 'function') renderStartControl(); if (typeof v162RenderLoginManager === 'function') v162RenderLoginManager(); } },
     monitor: { tab:'monitorTab', screen:'monitorScreen', render:function(){ if (typeof renderMonitor === 'function') renderMonitor(); } },
@@ -6322,7 +6322,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     });
 
     const badge = $('v163PageBadge'); if (badge) badge.textContent = VERSION + ' / 本部専用';
-    const h = document.querySelector('header h1'); if (h) h.textContent = '本部管理画面 v16.4.11';
+    const h = document.querySelector('header h1'); if (h) h.textContent = '本部管理画面 v16.4.13';
   }
 
   function activate(target, doRender){
@@ -6349,7 +6349,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     if (screen) { screen.classList.add('active'); screen.style.display='block'; }
 
     if (doRender !== false) {
-      try { item.render(); } catch(e) { console.warn('v16.4.11 hq render', current, e); }
+      try { item.render(); } catch(e) { console.warn('v16.4.13 hq render', current, e); }
     }
   }
 

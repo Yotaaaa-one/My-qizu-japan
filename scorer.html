@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Scorer v16.4.11</title>
+  <title>PGA Score Scorer v16.4.13</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1175,7 +1175,7 @@
 </head>
 <body class="v163-page-scorer">
 <header>
-  <h1>スコアラー画面 v16.4.11</h1>
+  <h1>スコアラー画面 v16.4.13</h1>
   <p>スコア入力専用・テストモード→本番切替</p>
 </header>
 
@@ -1894,14 +1894,51 @@ function isGroupFixed() {
   return !!fixedGroupId();
 }
 
+function scorerCurrentHoleLocalKey(groupId) {
+  return `pga_score_current_hole_${FIREBASE_TOURNAMENT_ID}_g${Number(groupId)}`;
+}
+
+function saveScorerCurrentHole(groupId, hole) {
+  const h = Number(hole);
+  if (!groupId || !h || h < 1 || h > 18) return;
+  try {
+    localStorage.setItem(scorerCurrentHoleLocalKey(groupId), String(h));
+  } catch (e) {}
+}
+
+function loadScorerCurrentHole(groupId) {
+  try {
+    const h = Number(localStorage.getItem(scorerCurrentHoleLocalKey(groupId)) || 0);
+    return h && h >= 1 && h <= 18 ? h : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function applyFixedGroupFromUrl() {
   const gid = fixedGroupId();
   if (!gid) return;
   const group = state.groups.find(g => Number(g.id) === gid);
   if (group) {
     state.selectedGroupId = group.id;
-    state.selectedHole = group.startHole || state.selectedHole || 1;
-    saveState();
+
+    // スコアラー端末では「現在ホール」は端末ごとに保持する。
+    // Firebase更新や本部操作で全体state.selectedHoleが1Hに戻っても、
+    // 端末に保存した現在ホールを優先して復元する。
+    const seq = (typeof holeSequence === "function") ? holeSequence(group.startHole || 1).map(Number) : Array.from({length:18}, (_,i)=>i+1);
+    const savedHole = loadScorerCurrentHole(group.id);
+    const currentHole = Number(state.selectedHole);
+    if (savedHole && seq.includes(savedHole)) {
+      state.selectedHole = savedHole;
+    } else if (!currentHole || !seq.includes(currentHole)) {
+      state.selectedHole = group.startHole || 1;
+      saveScorerCurrentHole(group.id, state.selectedHole);
+    } else {
+      saveScorerCurrentHole(group.id, currentHole);
+    }
+
+    // 担当組・現在ホールは端末状態なので、Firebaseへ再送信しない。
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 }
 
@@ -2290,6 +2327,7 @@ function loadCsvData(text) {
   state.groups = groups;
   state.selectedGroupId = groups[0].id;
   state.selectedHole = groups[0].startHole || 1;
+  saveScorerCurrentHole(groups[0].id, state.selectedHole);
   state.notices = [];
   state.pace = {};
   state.timeLogs = [];
@@ -2593,6 +2631,7 @@ function setupSelectors() {
 function renderScorer() {
   setupSelectors();
   const group = currentGroup();
+  if (group) saveScorerCurrentHole(group.id, state.selectedHole);
   $("groupLabel").textContent = group.name;
   $("holeLabel").textContent = "Hole " + state.selectedHole;
   renderModeBanner();
@@ -2789,6 +2828,7 @@ function moveToNextHoleIfComplete(options = {}) {
     // タイマー待機中に手動で別ホールへ移動していた場合は上書きしない
     if (Number(state.selectedHole) !== completedHole && !options.force) return;
     state.selectedHole = nextHole;
+    saveScorerCurrentHole(group.id, state.selectedHole);
     saveState();
     renderScorer();
     toast(`${group.name} 全員ホールアウト。Hole ${nextHole}へ自動移動しました`);
@@ -2820,6 +2860,7 @@ function moveTestToNextHoleIfComplete() {
   setTimeout(() => {
     if (Number(state.selectedHole) !== completedHole) return;
     state.selectedHole = nextHole;
+    saveScorerCurrentHole(group.id, state.selectedHole);
     saveState();
     renderScorer();
     toast(`【テスト】${group.name} 全員ホールアウト。Hole ${nextHole}へ移動しました`);
@@ -3083,6 +3124,7 @@ function setDeviceGroup() {
   }
   state.selectedGroupId = group.id;
   state.selectedHole = group.startHole || 1;
+  saveScorerCurrentHole(group.id, state.selectedHole);
   pendingDeviceGroupId = null;
   saveState();
 
@@ -4421,11 +4463,14 @@ $("groupSelect").onchange = e => {
   state.selectedGroupId = Number(e.target.value);
   const g = currentGroup();
   state.selectedHole = g.startHole || 1;
+  saveScorerCurrentHole(g.id, state.selectedHole);
   saveState();
   renderScorer();
 };
 $("holeSelect").onchange = e => {
   state.selectedHole = Number(e.target.value);
+  const group = currentGroup();
+  if (group) saveScorerCurrentHole(group.id, state.selectedHole);
   saveState();
   renderScorer();
 };
@@ -4617,6 +4662,7 @@ $("forceNextHoleBtn").onclick = () => {
     const nextHole = nextHoleForGroup(group, state.selectedHole);
     if (nextHole && isTestHoleCompleteForGroup(group, state.selectedHole)) {
       state.selectedHole = nextHole;
+      if (group) saveScorerCurrentHole(group.id, state.selectedHole);
       saveState();
       renderScorer();
       toast(`【テスト】Hole ${nextHole}へ移動しました`);
@@ -5669,6 +5715,7 @@ function v152ApplyQrAutoLogin() {
   if (!state.assignedDeviceGroupIds.some(id => Number(id) === Number(group.id))) state.assignedDeviceGroupIds.push(group.id);
   state.selectedGroupId = group.id;
   state.selectedHole = group.startHole || 1;
+  saveScorerCurrentHole(group.id, state.selectedHole);
   state.deviceLock.lockedAt = state.deviceLock.lockedAt || new Date().toISOString();
   state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
   state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
@@ -6238,7 +6285,7 @@ window.addEventListener('load', function(){
 
 
 <style id="v1644-scorer-flow-style">
-/* v16.4.11: restore scorer operation flow after login
+/* v16.4.13: restore scorer operation flow after login
    ログイン後は「テストモード入力 → 本番切替 → トラッキング入力」を表示する */
 body.v163-page-scorer.scorer-locked #scorerScreen > .card,
 body.v163-page-scorer #scorerScreen > .card:not(#scorerLoginGate),
@@ -6273,7 +6320,7 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
 
 <script id="v1644-scorer-flow-fix">
 (function(){
-  const VERSION = 'v16.4.11';
+  const VERSION = 'v16.4.13';
   function pageName(){
     const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
     if (p === 'index.html' || p === '') return 'login';
@@ -6292,11 +6339,14 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
       if (group) {
         state.deviceGroupId = Number(group.id);
         state.selectedGroupId = Number(group.id);
+        const savedHole = (typeof loadScorerCurrentHole === 'function') ? loadScorerCurrentHole(group.id) : null;
+        if (savedHole) state.selectedHole = savedHole;
         if (!state.selectedHole) state.selectedHole = group.startHole || 1;
+        if (typeof saveScorerCurrentHole === 'function') saveScorerCurrentHole(group.id, state.selectedHole);
         if (!group.mode) group.mode = 'test';
       }
-      if (typeof saveState === 'function') saveState({skipRemote:false});
-    } catch(e) { console.warn('v16.4.11 normalize scorer state', e); }
+      if (typeof saveState === 'function') saveState({skipRemote:true});
+    } catch(e) { console.warn('v16.4.13 normalize scorer state', e); }
   }
   function restoreScorerScreen(){
     if (pageName() !== 'scorer') return;
@@ -6322,12 +6372,12 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
       if (typeof renderScorer === 'function') renderScorer();
       if (typeof updateFixedGroupNotice === 'function') updateFixedGroupNotice();
       const badge = document.getElementById('v163PageBadge');
-      if (badge) badge.textContent = 'v16.4.11 / スコアラー専用';
+      if (badge) badge.textContent = 'v16.4.13 / スコアラー専用';
       const h1 = document.querySelector('header h1');
-      if (h1) h1.textContent = 'スコアラー画面 v16.4.11';
+      if (h1) h1.textContent = 'スコアラー画面 v16.4.13';
       const hp = document.querySelector('header p');
       if (hp) hp.textContent = 'テストモード → 本番切替 → トラッキング入力';
-    } catch(e) { console.warn('v16.4.11 scorer flow restore', e); }
+    } catch(e) { console.warn('v16.4.13 scorer flow restore', e); }
   }
   const oldSwitchTab = window.switchTab;
   if (typeof oldSwitchTab === 'function' && !oldSwitchTab.v1644Wrapped) {
@@ -6350,11 +6400,11 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
 
 <script id="v1646-build-stamp">
 (function(){
-  const BUILD='v16.4.11 / clean-start';
+  const BUILD='v16.4.13 / clean-start';
   function applyBuildStamp(){
     try {
       const badge=document.getElementById('v163PageBadge');
-      if (badge && !badge.textContent.includes('v16.4.11')) badge.textContent='v16.4.11 / スコアラー専用';
+      if (badge && !badge.textContent.includes('v16.4.13')) badge.textContent='v16.4.13 / スコアラー専用';
       const meta=document.querySelector('meta[name="pga-build"]');
       if(!meta){ const m=document.createElement('meta'); m.name='pga-build'; m.content=BUILD; document.head.appendChild(m); }
     } catch(e){}
@@ -6366,7 +6416,7 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
 
 <script id="v1646-scorer-lock-restore">
 (function(){
-  const VERSION='v16.4.11';
+  const VERSION='v16.4.13';
   const LOCK_KEY='pga_score_v1646_device_lock';
   function normId(v){ const n=Number(v); return Number.isFinite(n)&&n>0?n:null; }
   function getLock(){ try{return JSON.parse(localStorage.getItem(LOCK_KEY)||'null');}catch(e){return null;} }
@@ -6390,7 +6440,7 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
       if(lock.loginCode && !state.deviceLock.loginCode) state.deviceLock.loginCode=lock.loginCode;
       if(typeof STORAGE_KEY!=='undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       return true;
-    }catch(e){ console.warn('v16.4.11 apply lock failed',e); return false; }
+    }catch(e){ console.warn('v16.4.13 apply lock failed',e); return false; }
   }
   applyLock();
   if(typeof window.fixedGroupId==='function'){
@@ -6414,8 +6464,8 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
     document.querySelectorAll('#scorerScreen > .card').forEach(card=>{ if(card.id!=='scorerLoginGate') card.style.display='block'; });
     document.querySelectorAll('.hqOnly,#leaderboardTab,#monitorTab,#publicTab,#setupTab').forEach(el=>{el.style.display='none';});
     document.querySelectorAll('#scorerTab,#scorerHbhTab,#scorerRankingTab').forEach(el=>{el.style.display='block';});
-    const badge=document.getElementById('v163PageBadge'); if(badge) badge.textContent='v16.4.11 / スコアラー専用';
-    const h=document.querySelector('header h1'); if(h) h.textContent='スコアラー画面 v16.4.11';
+    const badge=document.getElementById('v163PageBadge'); if(badge) badge.textContent='v16.4.13 / スコアラー専用';
+    const h=document.querySelector('header h1'); if(h) h.textContent='スコアラー画面 v16.4.13';
     try{ if(typeof renderScorer==='function') renderScorer(); }catch(e){}
   }
   window.v1646RestoreScorer=showScorer;
@@ -6425,7 +6475,7 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
 })();
 </script>
 
-<!-- v16.4.11 click-safe tab controller: scorer -->
+<!-- v16.4.13 click-safe tab controller: scorer -->
 <style id="v16411-click-safe-tabs-scorer">
 body.pga-v16411-scorer #leaderboardTab,
 body.pga-v16411-scorer #monitorTab,
@@ -6463,7 +6513,7 @@ body.pga-v16411-scorer[data-tab="scorerRanking"] #scorerRankingScreen {
 </style>
 <script id="v16411-click-safe-tabs-scorer">
 (function(){
-  const VERSION = 'v16.4.11';
+  const VERSION = 'v16.4.13';
   const TAB_MAP = {
     scorer: { tab:'scorerTab', screen:'scorerScreen', render:function(){ if (typeof renderScorer === 'function') renderScorer(); } },
     scorerHbh: { tab:'scorerHbhTab', screen:'scorerHbhScreen', render:function(){ if (typeof renderScorerHbh === 'function') renderScorerHbh(); } },
@@ -6489,7 +6539,7 @@ body.pga-v16411-scorer[data-tab="scorerRanking"] #scorerRankingScreen {
 
     const gate = $('scorerLoginGate'); if (gate) gate.style.display='none';
     const badge = $('v163PageBadge'); if (badge) badge.textContent = VERSION + ' / スコアラー専用';
-    const h = document.querySelector('header h1'); if (h) h.textContent = 'スコアラー画面 v16.4.11';
+    const h = document.querySelector('header h1'); if (h) h.textContent = 'スコアラー画面 v16.4.13';
     const p = document.querySelector('header p'); if (p) p.textContent = 'テストモード → 本番切替 → トラッキング入力';
   }
 
@@ -6517,7 +6567,7 @@ body.pga-v16411-scorer[data-tab="scorerRanking"] #scorerRankingScreen {
     if (screen) { screen.classList.add('active'); screen.style.display='block'; }
 
     if (doRender !== false) {
-      try { item.render(); } catch(e) { console.warn('v16.4.11 scorer render', current, e); }
+      try { item.render(); } catch(e) { console.warn('v16.4.13 scorer render', current, e); }
     }
   }
 
