@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v15.2 実戦アプリ版</title>
+  <title>ゴルフトーナメント スコアラー入力システム v16.1 実戦アプリ版</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1174,7 +1174,7 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力システム v15.2</h1>
+  <h1>スコアラー入力システム v16.1</h1>
   <p>PWA・ログイン本線・非常用QR・本部復帰対応版</p>
 </header>
 
@@ -5623,7 +5623,7 @@ window.addEventListener('load', () => {
 
 
 /* =========================
-   v15.2 実戦アプリ版
+   v16.1 ページ分離安定版
    - ログイン画面をホーム画面追加の本線に
    - 解除PWは全大会共通 000000 固定
    - QRは非常用の最小機能、読取時は即ログイン
@@ -6009,11 +6009,60 @@ function v16ProtectLoginAction(){
     if (v16PageName() === 'login' && isGroupFixed()) setTimeout(()=>v16Go('scorer.html'), 250);
   };
 }
+function v161UrlParams(){ return new URLSearchParams(location.search || ''); }
+function v161IsResetRequested(){
+  const p = v161UrlParams();
+  return p.get('reset') === '1' || p.get('unlock') === '1' || p.get('adminReset') === '1';
+}
+function v161HardUnlockLocalOnly(){
+  try {
+    state.deviceGroupId = null;
+    state.selectedGroupId = state.groups?.[0]?.id || 1;
+    state.selectedHole = state.groups?.[0]?.startHole || 1;
+    state.deviceLock = {
+      loginCode: (state.deviceLock && state.deviceLock.loginCode) || (typeof v151Random4Digit === 'function' ? v151Random4Digit() : '0000'),
+      unlockPassword: (typeof V152_ADMIN_UNLOCK_PASSWORD !== 'undefined' ? V152_ADMIN_UNLOCK_PASSWORD : '000000'),
+      lockedAt: null,
+      tournamentId: FIREBASE_TOURNAMENT_ID,
+      tournamentName: state.tournamentName || FIREBASE_TOURNAMENT_ID
+    };
+    if (Array.isArray(state.assignedDeviceGroupIds)) state.assignedDeviceGroupIds = [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch(e) { console.error('v16.1 hard unlock error', e); }
+}
+function v161CleanUrlToIndex(){
+  const clean = location.pathname.replace(/[^/]*$/, 'index.html');
+  history.replaceState(null, '', clean + (location.hash || ''));
+}
+function v161AddScorerUnlockPanel(){
+  if (v16PageName() !== 'scorer') return;
+  if ($('v161ScorerUnlockPanel')) return;
+  const div = document.createElement('div');
+  div.id = 'v161ScorerUnlockPanel';
+  div.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:200;background:#fff;border:1px solid #d0d5dd;border-radius:16px;box-shadow:0 12px 32px rgba(16,24,40,.18);padding:10px;max-width:220px;font-size:12px;';
+  div.innerHTML = '<div style="font-weight:900;color:#073b24;margin-bottom:6px;">本部専用</div><button class="ghost" id="v161UnlockBtn" type="button" style="width:100%;padding:8px 10px;border-radius:12px;">端末ロック解除</button>';
+  document.body.appendChild(div);
+  const btn = $('v161UnlockBtn');
+  if (btn) btn.onclick = () => {
+    const input = prompt('本部解除PWを入力してください。');
+    if (input === null) return;
+    if (String(input).trim() !== '000000') { toast('解除パスワードが違います'); return; }
+    v161HardUnlockLocalOnly();
+    toast('端末ロックを解除しました');
+    setTimeout(()=>{ location.href = 'index.html?reset=1'; }, 400);
+  };
+}
 function v16ApplyPageMode(){
   const page = v16PageName();
   v16ProtectLoginAction();
+  if (v161IsResetRequested()) {
+    v161HardUnlockLocalOnly();
+    if (page !== 'login') { setTimeout(()=>{ location.href = 'index.html'; }, 50); return; }
+    v161CleanUrlToIndex();
+  }
   if (page === 'login') {
-    if (isGroupFixed()) { setTimeout(()=>v16Go('scorer.html'), 50); return; }
+    const params = v161UrlParams();
+    if (params.get('autologin') === '1' && isGroupFixed()) { setTimeout(()=>v16Go('scorer.html'), 50); return; }
     switchTab('scorer');
     v16EnhanceLogin();
     return;
@@ -6023,6 +6072,7 @@ function v16ApplyPageMode(){
     document.body.classList.add('v16-scorer-page');
     document.querySelectorAll('.hqOnly').forEach(v16Hide);
     switchTab('scorer');
+    v161AddScorerUnlockPanel();
     return;
   }
   if (page === 'hq') {
@@ -6047,11 +6097,11 @@ function v16ApplyPageMode(){
 window.addEventListener('load', () => setTimeout(v16ApplyPageMode, 500));
 setTimeout(v16ApplyPageMode, 900);
 
-/* v16 changelog
-   - ログイン・スコアラー・本部・モニター・一般モニターをページ分離
-   - PWAホーム画面の入口を index.html に統一
-   - ログインページでは4桁PW入力を必須化
-   - 未ログインで scorer.html に入った場合は index.html に戻す
+/* v16.1 changelog
+   - index.html は原則ログイン画面を表示し、ロック済みだけで自動遷移しないよう修正
+   - ?reset=1 / ?unlock=1 で端末ロックを強制解除
+   - scorer.html に本部専用の端末ロック解除ボタンを追加
+   - QRの autologin=1 の場合のみ scorer.html へ即遷移
 */
 
 </script>
