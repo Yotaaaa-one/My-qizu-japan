@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Public v16.4.5</title>
+  <title>PGA Score Public v16.4.6</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1173,7 +1173,7 @@
   </style>
 
 <style id="v163-force-style">
-/* v16.4.5 physical page separation */
+/* v16.4.6 physical page separation */
 body.v163-page-login .tabs,
 body.v163-page-monitor .tabs,
 body.v163-page-public .tabs { display:none !important; }
@@ -1198,7 +1198,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 </head>
 <body class="v163-page-public">
 <header>
-  <h1>一般モニター v16.4.5</h1>
+  <h1>一般モニター v16.4.6</h1>
   <p>一般モニター専用</p>
 </header>
 
@@ -1801,8 +1801,8 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
-const STORAGE_KEY = "golf_score_prototype_v16_4_5_clean";
-const TOURNAMENT_ID_STORAGE_KEY = "golf_score_current_tournament_id_v16_4_5";
+const STORAGE_KEY = "golf_score_prototype_v16_4_6_clean";
+const TOURNAMENT_ID_STORAGE_KEY = "golf_score_current_tournament_id_v16_4_6";
 
 function sanitizeTournamentId(value) {
   return String(value || "")
@@ -1811,7 +1811,7 @@ function sanitizeTournamentId(value) {
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
     .replace(/[^a-z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "")
-    .slice(0, 60) || "demo_tournament_v1645";
+    .slice(0, 60) || "demo_tournament_v1646";
 }
 
 function getTournamentIdFromUrl() {
@@ -1821,7 +1821,7 @@ function getTournamentIdFromUrl() {
 let FIREBASE_TOURNAMENT_ID = sanitizeTournamentId(
   getTournamentIdFromUrl() ||
   localStorage.getItem(TOURNAMENT_ID_STORAGE_KEY) ||
-  "demo_tournament_v1645"
+  "demo_tournament_v1646"
 );
 
 const firebaseConfig = {
@@ -6281,10 +6281,10 @@ window.addEventListener('load', function(){ setTimeout(function(){ try { if (typ
       const badgeId='v163PageBadge';
       if (!document.getElementById(badgeId)) {
         const b=document.createElement('div'); b.id=badgeId; b.className='v163PageBadge';
-        b.textContent = 'V16.4.5 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
+        b.textContent = 'V16.4.6 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
         const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
       }
-    } catch(e) { console.warn('v16.4.5 page force', e); }
+    } catch(e) { console.warn('v16.4.6 page force', e); }
   }
   window.addEventListener('DOMContentLoaded', apply);
   window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
@@ -6292,13 +6292,13 @@ window.addEventListener('load', function(){ setTimeout(function(){ try { if (typ
 })();
 </script>
 
-<script id="v1645-build-stamp">
+<script id="v1646-build-stamp">
 (function(){
-  const BUILD='V16.4.5 / clean-start';
+  const BUILD='V16.4.6 / clean-start';
   function applyBuildStamp(){
     try {
       const badge=document.getElementById('v163PageBadge');
-      if (badge && !badge.textContent.includes('V16.4.5')) badge.textContent='V16.4.5 / 一般モニター専用';
+      if (badge && !badge.textContent.includes('V16.4.6')) badge.textContent='V16.4.6 / 一般モニター専用';
       const meta=document.querySelector('meta[name="pga-build"]');
       if(!meta){ const m=document.createElement('meta'); m.name='pga-build'; m.content=BUILD; document.head.appendChild(m); }
     } catch(e){}
