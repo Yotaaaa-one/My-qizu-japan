@@ -1,6 +1,6 @@
 {
-  "name": "PGA Score System v16",
-  "short_name": "PGA Score",
+  "name": "PGA Score v16.3 System v16",
+  "short_name": "PGA Score v16.3",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

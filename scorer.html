@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v16.2.1 実戦アプリ版</title>
+  <title>PGA Score Scorer v16.3</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1171,11 +1171,35 @@
     }
 
   </style>
+
+<style id="v163-force-style">
+/* v16.3 physical page separation */
+body.v163-page-login .tabs,
+body.v163-page-monitor .tabs,
+body.v163-page-public .tabs { display:none !important; }
+body.v163-page-login .screen,
+body.v163-page-scorer .screen,
+body.v163-page-hq .screen,
+body.v163-page-monitor .screen,
+body.v163-page-public .screen { display:none !important; }
+body.v163-page-login #scorerScreen,
+body.v163-page-scorer #scorerScreen,
+body.v163-page-hq #leaderboardScreen,
+body.v163-page-monitor #monitorScreen,
+body.v163-page-public #publicScreen { display:block !important; }
+body.v163-page-login #scorerScreen > .card:not(#scorerLoginGate) { display:none !important; }
+body.v163-page-login #scorerLoginGate { display:block !important; }
+body.v163-page-scorer #scorerLoginGate { display:none !important; }
+body.v163-page-hq .scorerOnlyTab, body.v163-page-hq #scorerTab, body.v163-page-hq #monitorTab, body.v163-page-hq #publicTab { display:none !important; }
+body.v163-page-hq #leaderboardTab { display:block !important; }
+body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
+.v163PageBadge { display:inline-flex; margin:12px 14px 0; padding:7px 11px; border-radius:999px; background:#eef7f1; color:#073b24; font-weight:900; border:1px solid #b7e0c2; font-size:12px; }
+</style>
 </head>
-<body>
+<body class="v163-page-scorer">
 <header>
-  <h1>スコアラー入力システム v16.2.1</h1>
-  <p>PWA・ページ分離・ログインPW管理・本部復帰対応版</p>
+  <h1>スコアラー画面 v16.3</h1>
+  <p>スコア入力専用</p>
 </header>
 
 <div class="wrap">
@@ -6235,5 +6259,39 @@ window.addEventListener('load', function(){
 });
 </script>
 
+
+<script id="v163-force-script">
+(function(){
+  const PAGE = "scorer";
+  const TARGET = {login:'scorer', scorer:'scorer', hq:'leaderboard', monitor:'monitor', public:'public'}[PAGE] || 'scorer';
+  function apply(){
+    try {
+      document.body.classList.add('v163-page-' + PAGE);
+      if (typeof v16PageName === 'function') window.v16PageName = function(){ return PAGE === 'login' ? 'login' : PAGE; };
+      if (typeof switchTab === 'function') switchTab(TARGET);
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      const id = {login:'scorerScreen', scorer:'scorerScreen', hq:'leaderboardScreen', monitor:'monitorScreen', public:'publicScreen'}[PAGE];
+      const el = document.getElementById(id); if (el) el.classList.add('active');
+      if (PAGE === 'login') {
+        const gate = document.getElementById('scorerLoginGate'); if (gate) gate.style.display='block';
+        document.querySelectorAll('#scorerScreen > .card').forEach(card => { if(card.id !== 'scorerLoginGate') card.style.display='none'; });
+      }
+      if (PAGE === 'scorer') {
+        const gate = document.getElementById('scorerLoginGate'); if (gate) gate.style.display='none';
+      }
+      if (PAGE === 'hq' && typeof v162RenderLoginManager === 'function') v162RenderLoginManager();
+      const badgeId='v163PageBadge';
+      if (!document.getElementById(badgeId)) {
+        const b=document.createElement('div'); b.id=badgeId; b.className='v163PageBadge';
+        b.textContent = 'V16.3 / ' + ({login:'ログイン専用', scorer:'スコアラー専用', hq:'本部専用', monitor:'本部モニター専用', public:'一般モニター専用'}[PAGE]||PAGE);
+        const wrap=document.querySelector('.wrap'); if(wrap) wrap.insertAdjacentElement('beforebegin', b);
+      }
+    } catch(e) { console.warn('v16.3 page force', e); }
+  }
+  window.addEventListener('DOMContentLoaded', apply);
+  window.addEventListener('load', function(){ apply(); setTimeout(apply,300); setTimeout(apply,1000); setTimeout(apply,2000); });
+  setTimeout(apply,50);
+})();
+</script>
 </body>
 </html>
