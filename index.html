@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ゴルフトーナメント スコアラー入力システム v15.1 ログインロック版 固定解除PW対応</title>
+  <title>ゴルフトーナメント スコアラー入力システム v15.2 実戦アプリ版</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1174,8 +1174,8 @@
 </head>
 <body>
 <header>
-  <h1>スコアラー入力システム v15.1</h1>
-  <p>PWA・本部ログイン・端末ロック対応版（解除PW固定）</p>
+  <h1>スコアラー入力システム v15.2</h1>
+  <p>PWA・ログイン本線・非常用QR・本部復帰対応版</p>
 </header>
 
 <div class="wrap">
@@ -1213,7 +1213,7 @@
           <div class="loginCodeBox" id="scorerLoginCodeBox">----</div>
         </div>
         <div class="selectBox">
-          <label>解除用パスワード（全大会共通・固定）</label>
+          <label>解除用パスワード（全大会共通）</label>
           <div class="loginStatusBox" style="margin-top:0;">本部解除PW：<strong>000000</strong></div>
         </div>
       </div>
@@ -1221,7 +1221,7 @@
         <button class="ghost" id="generateScorerLoginCodeBtn">4桁を再生成</button>
         <button class="blue" id="scorerLoginLockBtn">本部ログインして端末固定</button>
       </div>
-      <p class="loginDangerText">※ 解除用パスワードは全大会共通で「000000」固定です。スコアラーには共有せず、本部で管理してください。</p>
+      <p class="loginDangerText">※ 解除用パスワードは全大会共通で 000000 固定です。スコアラーには通常操作させない運用です。</p>
     </div>
     <div class="card">
       <div class="row">
@@ -1539,7 +1539,7 @@
         <span class="pill">LOGIN LOCK</span>
         <h2 class="holeTitle">スコアラー端末ログイン設定</h2>
       </div>
-      <p class="small">スコアラー端末の初回ログイン用4桁パスワードを管理します。解除用パスワードは全大会共通で「000000」固定です。ログイン後は端末が担当組固定になります。</p>
+      <p class="small">スコアラー端末の初回ログイン用4桁パスワードと、解除用パスワードを管理します。ログイン後は端末が担当組固定になります。</p>
       <div class="loginStatusBox" id="scorerLockStatusBox">現在の端末ロック状態を確認中...</div>
       <div class="utility">
         <button class="ghost" id="setupGenerateLoginCodeBtn">4桁パスワード再生成</button>
@@ -5396,7 +5396,6 @@ v15RegisterServiceWorker();
 
 /* v15.1 scorer login / tournament lock */
 const V151_RECENT_TOURNAMENTS_KEY = "golf_score_recent_tournaments_v15_1";
-const V151_ADMIN_UNLOCK_PASSWORD = "000000";
 
 function v151Random4Digit() {
   return String(Math.floor(1000 + Math.random() * 9000));
@@ -5405,7 +5404,7 @@ function v151Random4Digit() {
 function v151EnsureLoginState() {
   if (!state.deviceLock) state.deviceLock = {};
   if (!state.deviceLock.loginCode) state.deviceLock.loginCode = v151Random4Digit();
-  state.deviceLock.unlockPassword = V151_ADMIN_UNLOCK_PASSWORD;
+  if (!('unlockPassword' in state.deviceLock)) state.deviceLock.unlockPassword = '';
   if (!('lockedAt' in state.deviceLock)) state.deviceLock.lockedAt = null;
   if (!state.deviceLock.tournamentId) state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
   if (!state.deviceLock.tournamentName) state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
@@ -5473,7 +5472,7 @@ function v151RenderLoginGate() {
   if (status) {
     const group = state.groups.find(g => Number(g.id) === Number(state.deviceGroupId));
     const lockedText = group ? `固定中：${group.name} / 大会：${state.deviceLock.tournamentName || FIREBASE_TOURNAMENT_ID}` : '未固定：スコアラー端末ログイン待ち';
-    status.innerHTML = `${lockedText}<br>ログイン4桁：<strong>${state.deviceLock.loginCode || '----'}</strong><br>解除パスワード：<strong>全大会共通 000000</strong>`;
+    status.innerHTML = `${lockedText}<br>ログイン4桁：<strong>${state.deviceLock.loginCode || '----'}</strong><br>解除パスワード：<strong>${state.deviceLock.unlockPassword ? '設定済' : '未設定'}</strong>`;
   }
 }
 
@@ -5490,7 +5489,8 @@ function v151LockScorerDevice() {
   const gid = Number($('scorerLoginGroupSelect')?.value || state.selectedGroupId);
   const group = state.groups.find(g => Number(g.id) === gid);
   if (!group) { toast('担当組を選択してください'); return; }
-  const unlock = V151_ADMIN_UNLOCK_PASSWORD;
+  const unlock = String($('scorerUnlockPasswordInput')?.value || '').trim();
+  if (unlock.length < 4) { toast('解除用パスワードは4桁以上で設定してください'); return; }
 
   const selectedTournamentId = $('scorerLoginTournamentSelect')?.value || FIREBASE_TOURNAMENT_ID;
   const selectedTournamentLabel = $('scorerLoginTournamentSelect')?.selectedOptions?.[0]?.textContent || selectedTournamentId;
@@ -5507,17 +5507,21 @@ function v151LockScorerDevice() {
 
 function v151ProtectedClearDeviceGroup() {
   v151EnsureLoginState();
-  const input = prompt('端末設定を解除するには、全大会共通の解除用パスワードを入力してください。');
-  if (input === null) return;
-  if (String(input).trim() !== V151_ADMIN_UNLOCK_PASSWORD) {
-    toast('解除用パスワードが違います');
+  if (state.deviceLock.unlockPassword) {
+    const input = prompt('端末設定を解除するには、解除用パスワードを入力してください。');
+    if (input === null) return;
+    if (String(input).trim() !== String(state.deviceLock.unlockPassword)) {
+      toast('解除用パスワードが違います');
+      return;
+    }
+  } else if (!confirm('この端末の担当組設定を解除しますか？')) {
     return;
   }
   const oldCode = state.deviceLock.loginCode || v151Random4Digit();
   clearDeviceGroup();
   state.deviceLock = {
     loginCode: oldCode,
-    unlockPassword: V151_ADMIN_UNLOCK_PASSWORD,
+    unlockPassword: '',
     lockedAt: null,
     tournamentId: FIREBASE_TOURNAMENT_ID,
     tournamentName: state.tournamentName || FIREBASE_TOURNAMENT_ID
@@ -5534,7 +5538,7 @@ function v151CopyLoginInfo() {
     `大会：${state.deviceLock.tournamentName || state.tournamentName || FIREBASE_TOURNAMENT_ID}`,
     `担当組：${group ? group.name : '-'}`,
     `ログイン4桁：${state.deviceLock.loginCode || '----'}`,
-    `解除パスワード：全大会共通 000000`
+    `解除パスワード：${state.deviceLock.unlockPassword ? '設定済（本部管理）' : '未設定'}`
   ].join('\n');
   navigator.clipboard?.writeText(text).then(() => toast('ログイン情報をコピーしました')).catch(() => alert(text));
 }
@@ -5612,9 +5616,306 @@ window.addEventListener('load', () => {
    - スコアラー端末ログイン画面を追加
    - 大会名をスクロール選択方式に対応
    - ログイン用4桁ランダムパスワード生成
-   - 解除用パスワードは全大会共通 000000 固定
    - 解除用パスワードによる本部専用解除
    - ログイン後は担当組固定・スコアラー側で通常解除不可
+*/
+
+
+
+/* =========================
+   v15.2 実戦アプリ版
+   - ログイン画面をホーム画面追加の本線に
+   - 解除PWは全大会共通 000000 固定
+   - QRは非常用の最小機能、読取時は即ログイン
+   - 本部限定で棄権選手をプレー復帰
+========================= */
+const V152_ADMIN_UNLOCK_PASSWORD = '000000';
+
+function v152Normalize() {
+  if (!state.deviceLock) state.deviceLock = {};
+  if (!state.deviceLock.loginCode) state.deviceLock.loginCode = v151Random4Digit();
+  state.deviceLock.unlockPassword = V152_ADMIN_UNLOCK_PASSWORD;
+  if (!('lockedAt' in state.deviceLock)) state.deviceLock.lockedAt = null;
+  if (!state.deviceLock.tournamentId) state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
+  if (!state.deviceLock.tournamentName) state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
+  if (!state.adminLogs) state.adminLogs = [];
+}
+
+const v152OriginalNormalizeLoadedState = normalizeLoadedState;
+normalizeLoadedState = function() {
+  v152OriginalNormalizeLoadedState();
+  v152Normalize();
+};
+v152Normalize();
+
+function v152BackupQrUrl(groupId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('tournament', FIREBASE_TOURNAMENT_ID);
+  url.searchParams.set('group', groupId);
+  url.searchParams.set('autologin', '1');
+  return url.toString();
+}
+
+function v152ApplyQrAutoLogin() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('autologin') !== '1') return;
+  const gid = Number(params.get('group') || 0);
+  const group = state.groups.find(g => Number(g.id) === gid);
+  if (!group) return;
+  v152Normalize();
+  state.deviceGroupId = group.id;
+  if (!state.assignedDeviceGroupIds) state.assignedDeviceGroupIds = [];
+  if (!state.assignedDeviceGroupIds.some(id => Number(id) === Number(group.id))) state.assignedDeviceGroupIds.push(group.id);
+  state.selectedGroupId = group.id;
+  state.selectedHole = group.startHole || 1;
+  state.deviceLock.lockedAt = state.deviceLock.lockedAt || new Date().toISOString();
+  state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
+  state.deviceLock.tournamentName = state.tournamentName || FIREBASE_TOURNAMENT_ID;
+  saveState({ skipRemote:false });
+}
+
+const v152OriginalV151EnsureLoginState = v151EnsureLoginState;
+v151EnsureLoginState = function() {
+  v152OriginalV151EnsureLoginState();
+  v152Normalize();
+};
+
+v151LockScorerDevice = function() {
+  v152Normalize();
+  const gid = Number($('scorerLoginGroupSelect')?.value || state.selectedGroupId);
+  const group = state.groups.find(g => Number(g.id) === gid);
+  if (!group) { toast('担当組を選択してください'); return; }
+
+  const selectedTournamentId = $('scorerLoginTournamentSelect')?.value || FIREBASE_TOURNAMENT_ID;
+  const selectedTournamentLabel = $('scorerLoginTournamentSelect')?.selectedOptions?.[0]?.textContent || selectedTournamentId;
+  state.deviceLock.unlockPassword = V152_ADMIN_UNLOCK_PASSWORD;
+  state.deviceLock.lockedAt = new Date().toISOString();
+  state.deviceLock.tournamentId = sanitizeTournamentId(selectedTournamentId);
+  state.deviceLock.tournamentName = selectedTournamentLabel.replace(/（.*$/, '') || selectedTournamentId;
+  v151RememberTournament(state.deviceLock.tournamentId, state.deviceLock.tournamentName);
+
+  pendingDeviceGroupId = group.id;
+  setDeviceGroup();
+  v151RenderLoginGate();
+};
+
+v151ProtectedClearDeviceGroup = function() {
+  v152Normalize();
+  const input = prompt('端末設定を解除するには、本部解除パスワードを入力してください。');
+  if (input === null) return;
+  if (String(input).trim() !== V152_ADMIN_UNLOCK_PASSWORD) {
+    toast('解除パスワードが違います');
+    return;
+  }
+  const oldCode = state.deviceLock.loginCode || v151Random4Digit();
+  clearDeviceGroup();
+  state.deviceLock = {
+    loginCode: oldCode,
+    unlockPassword: V152_ADMIN_UNLOCK_PASSWORD,
+    lockedAt: null,
+    tournamentId: FIREBASE_TOURNAMENT_ID,
+    tournamentName: state.tournamentName || FIREBASE_TOURNAMENT_ID
+  };
+  saveState();
+  v151RenderLoginGate();
+};
+
+v151CopyLoginInfo = function() {
+  v152Normalize();
+  const group = state.groups.find(g => Number(g.id) === Number(state.deviceGroupId || state.selectedGroupId));
+  const text = [
+    'PGAスコア入力システム ログイン情報',
+    `大会：${state.deviceLock.tournamentName || state.tournamentName || FIREBASE_TOURNAMENT_ID}`,
+    `担当組：${group ? group.name : '-'}`,
+    `ログイン4桁：${state.deviceLock.loginCode || '----'}`,
+    `本部解除PW：${V152_ADMIN_UNLOCK_PASSWORD}`
+  ].join('\n');
+  navigator.clipboard?.writeText(text).then(() => toast('ログイン情報をコピーしました')).catch(() => alert(text));
+};
+
+const v152OriginalV151RenderLoginGate = v151RenderLoginGate;
+v151RenderLoginGate = function() {
+  v152OriginalV151RenderLoginGate();
+  v152Normalize();
+  const status = $('scorerLockStatusBox');
+  if (status) {
+    const group = state.groups.find(g => Number(g.id) === Number(state.deviceGroupId));
+    const lockedText = group ? `固定中：${group.name} / 大会：${state.deviceLock.tournamentName || FIREBASE_TOURNAMENT_ID}` : '未固定：スコアラー端末ログイン待ち';
+    status.innerHTML = `${lockedText}<br>ログイン4桁：<strong>${state.deviceLock.loginCode || '----'}</strong><br>本部解除PW：<strong>${V152_ADMIN_UNLOCK_PASSWORD}</strong>`;
+  }
+};
+
+function v152RenderBackupQrPanel() {
+  const qrList = $('groupQrList');
+  if (!qrList) return;
+  const qrCard = qrList.closest('.card');
+  const urlCard = $('groupUrlList')?.closest('.card');
+  if (urlCard) urlCard.style.display = 'none';
+  if (!qrCard) return;
+  const selected = Number($('v152BackupQrGroup')?.value || state.selectedGroupId || state.groups[0]?.id || 1);
+  qrCard.innerHTML = `
+    <div>
+      <span class="pill">BACKUP QR</span>
+      <h2 class="holeTitle">非常用QR</h2>
+    </div>
+    <p class="small">通常はログイン方式で運用します。端末故障などの非常時のみ、本部で組を選択してQRを表示します。QR読取時はログイン不要で担当組に即固定されます。</p>
+    <div class="row" style="margin-top:12px;">
+      <div class="selectBox">
+        <label>担当組</label>
+        <select id="v152BackupQrGroup">
+          ${state.groups.map(g => `<option value="${g.id}" ${Number(g.id) === selected ? 'selected' : ''}>${g.name} / ${g.plannedStart || '-'} / ${g.startHole || 1}H</option>`).join('')}
+        </select>
+      </div>
+      <div class="selectBox">
+        <label>操作</label>
+        <button class="blue" id="v152ShowBackupQrBtn">QR表示</button>
+      </div>
+    </div>
+    <div class="utility">
+      <button class="ghost" id="v152CopyBackupQrUrlBtn">URLコピー</button>
+      <button class="ghost" id="v152RefreshBackupQrBtn">更新</button>
+    </div>
+    <p class="small" id="v152BackupQrUrlLabel" style="word-break:break-all;margin-top:10px;"></p>
+  `;
+  const select = $('v152BackupQrGroup');
+  const label = $('v152BackupQrUrlLabel');
+  const currentUrl = () => v152BackupQrUrl(Number(select?.value || selected));
+  if (label) label.textContent = currentUrl();
+  if (select) select.onchange = () => { if (label) label.textContent = currentUrl(); };
+  const show = $('v152ShowBackupQrBtn');
+  if (show) show.onclick = () => {
+    const gid = Number(select?.value || selected);
+    const group = state.groups.find(g => Number(g.id) === gid);
+    if (!group) return;
+    const url = v152BackupQrUrl(gid);
+    $('qrModalTitle').textContent = `${group.name} 非常用QR`;
+    $('qrModalImage').src = qrImageUrl(url);
+    $('qrModalUrl').textContent = url;
+    $('copyQrUrlBtn').dataset.copyUrl = url;
+    showModal('qrModal');
+  };
+  const copy = $('v152CopyBackupQrUrlBtn');
+  if (copy) copy.onclick = async () => {
+    const url = currentUrl();
+    try { await navigator.clipboard.writeText(url); toast('非常用URLをコピーしました'); }
+    catch(e) { alert(url); }
+  };
+  const refresh = $('v152RefreshBackupQrBtn');
+  if (refresh) refresh.onclick = () => v152RenderBackupQrPanel();
+}
+
+function v152FindPlayerForNotice(notice) {
+  if (!notice) return null;
+  let groups = state.groups || [];
+  let group = null;
+  if (notice.groupId) group = groups.find(g => Number(g.id) === Number(notice.groupId));
+  if (!group && notice.groupName) group = groups.find(g => String(g.name) === String(notice.groupName));
+  if (!group && notice.groupName) group = groups.find(g => String(notice.groupName).includes(String(g.id)) || String(notice.groupName).includes(String(g.name)));
+  if (!group) group = groups.find(g => (g.players || []).some(p => p.name === notice.playerName));
+  if (!group) return null;
+  const player = (group.players || []).find(p => p.id === notice.playerId || p.name === notice.playerName);
+  return player ? { group, player } : null;
+}
+
+function v152AddAdminLog(action, group, player, note) {
+  if (!state.adminLogs) state.adminLogs = [];
+  state.adminLogs.unshift({
+    id:'admin_' + Date.now() + '_' + Math.random().toString(16).slice(2),
+    time: nowTimeLabel(),
+    at: new Date().toISOString(),
+    action,
+    groupId: group?.id || null,
+    groupName: group?.name || '',
+    playerId: player?.id || '',
+    playerName: player?.name || '',
+    note: note || ''
+  });
+  state.adminLogs = state.adminLogs.slice(0, 100);
+}
+
+function v152RestoreWithdrawnPlayer(noticeId) {
+  const notice = (state.notices || []).find(n => n.id === noticeId);
+  const found = v152FindPlayerForNotice(notice);
+  if (!found) { toast('対象選手を特定できません'); return; }
+  const { group, player } = found;
+  if (player.status !== 'withdrawn') { toast('この選手は現在棄権状態ではありません'); return; }
+  if (!confirm(`${group.name} ${player.name}選手をプレー復帰しますか？\n\nこの操作は本部側のみで行います。`)) return;
+  player.status = 'active';
+  delete player.withdrawnAt;
+  delete player.withdrawnAtHole;
+  if (notice) notice.status = '完了';
+  v152AddAdminLog('プレー復帰', group, player, '本部により棄権状態を解除');
+  saveState();
+  renderAllScreens();
+  toast(`${player.name}選手をプレー復帰しました`);
+}
+
+function v152DecorateWithdrawalNotices() {
+  const items = Array.from(document.querySelectorAll('#noticeList .noticeItem'));
+  const notices = state.notices || [];
+  items.forEach((item, index) => {
+    const notice = notices[index];
+    if (!notice || !String(notice.type || '').includes('棄権')) return;
+    if (item.querySelector('.v152RestoreBtn')) return;
+    const found = v152FindPlayerForNotice(notice);
+    if (!found || found.player.status !== 'withdrawn') return;
+    const wrap = document.createElement('div');
+    wrap.className = 'v14Toolbar';
+    wrap.style.marginTop = '10px';
+    wrap.innerHTML = `<button class="blue v152RestoreBtn" type="button">プレー復帰</button>`;
+    item.appendChild(wrap);
+    wrap.querySelector('button').onclick = () => v152RestoreWithdrawnPlayer(notice.id);
+  });
+}
+
+const v152OriginalAddNotice = addNotice;
+addNotice = function(type, playerName, message) {
+  const before = (state.notices || []).length;
+  v152OriginalAddNotice(type, playerName, message);
+  const notice = (state.notices || [])[0];
+  if (notice && (state.notices || []).length >= before) {
+    const group = currentGroup();
+    notice.groupId = group?.id || notice.groupId;
+    const player = group?.players?.find(p => p.name === playerName);
+    if (player) notice.playerId = player.id;
+    saveState();
+  }
+};
+
+const v152OriginalRenderNotices = renderNotices;
+renderNotices = function() {
+  v152OriginalRenderNotices();
+  v152DecorateWithdrawalNotices();
+};
+
+const v152OriginalRenderAllScreens = renderAllScreens;
+renderAllScreens = function() {
+  v152OriginalRenderAllScreens();
+  v152RenderBackupQrPanel();
+  v152DecorateWithdrawalNotices();
+};
+
+const v152OriginalRenderTournamentManager = renderTournamentManager;
+renderTournamentManager = function() {
+  v152OriginalRenderTournamentManager();
+  v152RenderBackupQrPanel();
+};
+
+const v152OriginalSwitchTab = switchTab;
+switchTab = function(target) {
+  v152OriginalSwitchTab(target);
+  if (target === 'setup') v152RenderBackupQrPanel();
+  if (target === 'leaderboard') v152DecorateWithdrawalNotices();
+};
+
+v152ApplyQrAutoLogin();
+
+/* v15.2 changelog
+   - ホーム画面追加はログイン画面一本化
+   - QRは本部専用の非常用として最小化
+   - 非常用QRは autologin=1 でログイン不要、担当組に即固定
+   - 解除PWは全大会共通 000000
+   - 本部の棄権通知カードに「プレー復帰」を追加、音声通知なし
 */
 
 window.addEventListener('online', () => { toast('オンラインに復帰しました'); if (firebaseReady) saveRemoteStateNow(false); });
