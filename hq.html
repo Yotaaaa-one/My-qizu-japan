@@ -6804,5 +6804,161 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
 })();
 </script>
 
+<script id="v16414-hq-voice-legacy-direct">
+(function(){
+  const VOICE_ENABLE_KEY = 'pga_score_hq_voice_notifications_enabled_v16414';
+  const spokenSignatures = new Set();
+
+  function textOf(value) {
+    return String(value == null ? '' : value);
+  }
+
+  function isVoiceEnabled() {
+    try {
+      return localStorage.getItem(VOICE_ENABLE_KEY) === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function noticeClass(notice) {
+    try {
+      return typeof noticeTypeClass === 'function' ? noticeTypeClass(textOf(notice?.type)) : '';
+    } catch(e) {
+      return '';
+    }
+  }
+
+  function noticeKind(notice) {
+    const haystack = [
+      textOf(notice?.type),
+      textOf(notice?.message),
+      noticeClass(notice)
+    ].join('|');
+    if (
+      haystack.includes('referee') ||
+      haystack.includes('\u7af6\u6280\u59d4\u54e1') ||
+      haystack.includes('\u8981\u8acb') ||
+      haystack.includes('蟋泌藤') ||
+      haystack.includes('隕∬ｫ')
+    ) return 'referee';
+    if (
+      haystack.includes('withdraw') ||
+      haystack.includes('\u68c4\u6a29') ||
+      haystack.includes('譽') ||
+      haystack.includes('ｨｩ')
+    ) return 'withdraw';
+    return '';
+  }
+
+  function isDoneNotice(notice) {
+    const status = textOf(notice?.status);
+    return status === '\u5b8c\u4e86' || status.includes('螳御');
+  }
+
+  function groupText(notice) {
+    if (notice?.groupId) return `\u7b2c${notice.groupId}\u7d44`;
+    const raw = textOf(notice?.groupName).trim();
+    const numeric = raw.match(/\d+/);
+    if (numeric) return `\u7b2c${numeric[0]}\u7d44`;
+    return raw || '\u7d44\u672a\u78ba\u8a8d';
+  }
+
+  function holeText(notice) {
+    const hole = Number(notice?.hole || 0);
+    return hole ? `${hole}\u756a\u30db\u30fc\u30eb` : '\u30db\u30fc\u30eb\u672a\u78ba\u8a8d';
+  }
+
+  function speechText(notice) {
+    const group = groupText(notice);
+    const hole = holeText(notice);
+    if (noticeKind(notice) === 'withdraw') {
+      return `\u68c4\u6a29\u9023\u7d61\u3001${group}\u3001${hole}\u3002\u68c4\u6a29\u9023\u7d61\u3001${group}\u3001${hole}\u3002`;
+    }
+    return `\u7af6\u6280\u59d4\u54e1\u8981\u8acb\u3001${group}\u3001${hole}\u3002\u7af6\u6280\u59d4\u54e1\u8981\u8acb\u3001${group}\u3001${hole}\u3002`;
+  }
+
+  function signature(notice) {
+    return [
+      noticeKind(notice),
+      textOf(notice?.id),
+      textOf(notice?.type),
+      textOf(notice?.groupId),
+      textOf(notice?.groupName),
+      textOf(notice?.hole),
+      textOf(notice?.playerId),
+      textOf(notice?.playerName),
+      textOf(notice?.time),
+      textOf(notice?.message),
+      textOf(notice?.status)
+    ].join('|');
+  }
+
+  window.v141Speak = function(text, onEnd) {
+    console.log('[v16.4.14 HQ voice] \u0073\u0070\u0065\u0061\u006b\u95a2\u6570\u547c\u3073\u51fa\u3057', { text });
+    try {
+      if (!window.speechSynthesis || !text) {
+        console.warn('[v16.4.14 HQ voice] \u8aad\u307f\u4e0a\u3052\u5931\u6557', { reason: 'speechSynthesis unavailable or empty text', text });
+        if (onEnd) onEnd();
+        return;
+      }
+      const synth = window.speechSynthesis;
+      try { synth.cancel(); } catch(e) { console.warn('[v16.4.14 HQ voice] speechSynthesis.cancel failed', e); }
+      try { synth.resume(); } catch(e) { console.warn('[v16.4.14 HQ voice] speechSynthesis.resume failed', e); }
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ja-JP';
+      const voices = typeof synth.getVoices === 'function' ? synth.getVoices() : [];
+      const jaVoice = voices.find(v => v.lang === 'ja-JP') || voices.find(v => /^ja[-_]?/i.test(v.lang || ''));
+      if (jaVoice) utter.voice = jaVoice;
+      utter.rate = 0.95;
+      utter.pitch = 1.0;
+      utter.volume = 1.0;
+      utter.onend = () => { if (onEnd) onEnd(); };
+      utter.onerror = event => {
+        console.warn('[v16.4.14 HQ voice] \u8aad\u307f\u4e0a\u3052\u5931\u6557', event);
+        if (onEnd) onEnd();
+      };
+
+      setTimeout(() => {
+        try {
+          synth.resume();
+          console.log('[v16.4.14 HQ voice] speechSynthesis.speak', { text, voice: utter.voice?.name || null });
+          synth.speak(utter);
+        } catch(e) {
+          console.warn('[v16.4.14 HQ voice] \u8aad\u307f\u4e0a\u3052\u5931\u6557', e);
+          if (onEnd) onEnd();
+        }
+      }, 300);
+    } catch(e) {
+      console.warn('[v16.4.14 HQ voice] \u8aad\u307f\u4e0a\u3052\u5931\u6557', e);
+      if (onEnd) onEnd();
+    }
+  };
+
+  window.v141QueueNoticeSpeech = function(notice) {
+    const kind = noticeKind(notice);
+    const sig = signature(notice);
+    console.log('[v16.4.14 HQ voice] \u901a\u77e5\u691c\u77e5', {
+      id: notice?.id,
+      type: notice?.type,
+      kind,
+      signature: sig
+    });
+
+    if (!kind || isDoneNotice(notice)) return;
+    const text = speechText(notice);
+    console.log('[v16.4.14 HQ voice] \u8aad\u307f\u4e0a\u3052\u6587', { text });
+    if (spokenSignatures.has(sig)) return;
+    if (!isVoiceEnabled()) {
+      console.log('[v16.4.14 HQ voice] voice disabled; legacy notice not spoken', { id: notice?.id, type: notice?.type, signature: sig });
+      return;
+    }
+    spokenSignatures.add(sig);
+    window.v141Speak(text);
+  };
+})();
+</script>
+
 </body>
 </html>
