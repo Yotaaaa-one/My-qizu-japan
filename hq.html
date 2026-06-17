@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score HQ v16.4.13</title>
+  <title>PGA Score HQ v16.4.14</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1175,7 +1175,7 @@
 </head>
 <body class="v163-page-hq">
 <header>
-  <h1>本部管理画面 v16.4.13</h1>
+  <h1>本部管理画面 v16.4.14</h1>
   <p>ログインPW管理・本部復帰・初期データリセット版</p>
 </header>
 
@@ -6390,6 +6390,101 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
   window.addEventListener('DOMContentLoaded', function(){ setTimeout(init, 0); });
   window.addEventListener('load', function(){ init(); setTimeout(init, 350); setTimeout(function(){ activate(current,false); bind(); }, 1600); });
   setTimeout(init, 100);
+})();
+</script>
+
+<script id="v16414-hq-voice-fix">
+(function(){
+  const VERSION = 'v16.4.14';
+  const spokenIds = new Set();
+  let initialized = false;
+
+  function isDoneNotice(notice) {
+    return String(notice?.status || '') === '完了';
+  }
+
+  function shouldSpeakNotice(notice) {
+    const type = String(notice?.type || '');
+    return type.includes('競技委員') || type.includes('棄権');
+  }
+
+  function groupText(notice) {
+    const raw = String(notice?.groupName || '').trim();
+    if (raw) return raw;
+    if (notice?.groupId) return `第${notice.groupId}組`;
+    return '組未確認';
+  }
+
+  function holeText(notice) {
+    const hole = Number(notice?.hole || 0);
+    return hole ? `${hole}番ホール` : 'ホール未確認';
+  }
+
+  function speechText(notice) {
+    const group = groupText(notice);
+    const hole = holeText(notice);
+    if (String(notice?.type || '').includes('棄権')) {
+      return `棄権連絡、${group}、${hole}。棄権連絡、${group}、${hole}。`;
+    }
+    return `競技委員要請、${group}、${hole}。競技委員要請、${group}、${hole}。`;
+  }
+
+  window.v141IsHqVoiceTerminal = function() {
+    return !(typeof isScorerMode === 'function' && isScorerMode());
+  };
+
+  window.v141NoticeSpeechText = speechText;
+
+  function queueNotice(notice) {
+    if (!notice || !notice.id || spokenIds.has(notice.id) || isDoneNotice(notice) || !shouldSpeakNotice(notice)) return;
+    spokenIds.add(notice.id);
+    if (typeof v141QueueNoticeSpeech === 'function') {
+      v141QueueNoticeSpeech(notice);
+    }
+  }
+
+  function scanNotices() {
+    const notices = Array.isArray(window.state?.notices) ? window.state.notices : [];
+    if (!initialized) {
+      notices.forEach(n => { if (n?.id) spokenIds.add(n.id); });
+      initialized = true;
+      return;
+    }
+    notices.slice().reverse().forEach(queueNotice);
+  }
+
+  window.v16414ScanHqVoiceNotices = scanNotices;
+
+  const originalRenderNotices = window.renderNotices;
+  if (typeof originalRenderNotices === 'function') {
+    window.renderNotices = function() {
+      const result = originalRenderNotices.apply(this, arguments);
+      setTimeout(scanNotices, 0);
+      return result;
+    };
+  }
+
+  const originalRenderAllScreens = window.renderAllScreens;
+  if (typeof originalRenderAllScreens === 'function') {
+    window.renderAllScreens = function() {
+      const result = originalRenderAllScreens.apply(this, arguments);
+      setTimeout(scanNotices, 0);
+      return result;
+    };
+  }
+
+  function applyStamp() {
+    const badge = document.getElementById('v163PageBadge');
+    if (badge) badge.textContent = VERSION + ' / 本部専用';
+    const h = document.querySelector('header h1');
+    if (h) h.textContent = '本部管理画面 ' + VERSION;
+    document.title = 'PGA Score HQ ' + VERSION;
+  }
+
+  window.addEventListener('DOMContentLoaded', function(){ applyStamp(); setTimeout(scanNotices, 0); });
+  window.addEventListener('load', function(){ applyStamp(); setTimeout(scanNotices, 300); setTimeout(applyStamp, 1800); });
+  setTimeout(applyStamp, 100);
+  setTimeout(applyStamp, 2200);
 })();
 </script>
 
