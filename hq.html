@@ -6583,6 +6583,18 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
       haystack.includes('譽') ||
       haystack.includes('ｨｩ')
     ) return 'withdraw';
+    if (
+      haystack.includes('office') ||
+      haystack.includes('\u672c\u90e8\u9023\u7d61') ||
+      haystack.includes('譛ｬ驛ｨ') ||
+      haystack.includes('騾｣邨｡')
+    ) return 'office';
+    if (
+      haystack.includes('office') ||
+      haystack.includes('\u672c\u90e8\u9023\u7d61') ||
+      haystack.includes('譛ｬ驛ｨ') ||
+      haystack.includes('騾｣邨｡')
+    ) return 'office';
     return '';
   }
 
@@ -6609,6 +6621,12 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     const hole = holeText(notice);
     if (noticeKind(notice) === 'withdraw') {
       return `\u68c4\u6a29\u9023\u7d61\u3001${group}\u3001${hole}\u3002\u68c4\u6a29\u9023\u7d61\u3001${group}\u3001${hole}\u3002`;
+    }
+    if (noticeKind(notice) === 'office') {
+      return `\u672c\u90e8\u9023\u7d61\u3001${group}\u3001${hole}\u3002\u672c\u90e8\u9023\u7d61\u3001${group}\u3001${hole}\u3002`;
+    }
+    if (noticeKind(notice) === 'office') {
+      return `\u672c\u90e8\u9023\u7d61\u3001${group}\u3001${hole}\u3002\u672c\u90e8\u9023\u7d61\u3001${group}\u3001${hole}\u3002`;
     }
     return `\u7af6\u6280\u59d4\u54e1\u8981\u8acb\u3001${group}\u3001${hole}\u3002\u7af6\u6280\u59d4\u54e1\u8981\u8acb\u3001${group}\u3001${hole}\u3002`;
   }
@@ -6956,6 +6974,106 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     }
     spokenSignatures.add(sig);
     window.v141Speak(text);
+  };
+})();
+</script>
+
+<script id="v16414-hq-office-voice-final">
+(function(){
+  const spokenOfficeSignatures = new Set();
+
+  function textOf(value) {
+    return String(value == null ? '' : value);
+  }
+
+  function isVoiceEnabled() {
+    try {
+      return localStorage.getItem('pga_score_hq_voice_notifications_enabled_v16414') === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function noticeClass(notice) {
+    try {
+      return typeof noticeTypeClass === 'function' ? noticeTypeClass(textOf(notice?.type)) : '';
+    } catch(e) {
+      return '';
+    }
+  }
+
+  function isOfficeNotice(notice) {
+    const haystack = [textOf(notice?.type), textOf(notice?.message), noticeClass(notice)].join('|');
+    return haystack.includes('office') ||
+      haystack.includes('\u672c\u90e8\u9023\u7d61') ||
+      haystack.includes('譛ｬ驛ｨ') ||
+      haystack.includes('騾｣邨｡');
+  }
+
+  function isDoneNotice(notice) {
+    const status = textOf(notice?.status);
+    return status === '\u5b8c\u4e86' || status.includes('螳御') || status.includes('陞ｳ蠕｡');
+  }
+
+  function groupText(notice) {
+    if (notice?.groupId) return `\u7b2c${notice.groupId}\u7d44`;
+    const raw = textOf(notice?.groupName).trim();
+    const numeric = raw.match(/\d+/);
+    if (numeric) return `\u7b2c${numeric[0]}\u7d44`;
+    return raw || '\u7d44\u672a\u78ba\u8a8d';
+  }
+
+  function holeText(notice) {
+    const hole = Number(notice?.hole || 0);
+    return hole ? `${hole}\u756a\u30db\u30fc\u30eb` : '\u30db\u30fc\u30eb\u672a\u78ba\u8a8d';
+  }
+
+  function officeSpeechText(notice) {
+    const group = groupText(notice);
+    const hole = holeText(notice);
+    return `\u672c\u90e8\u9023\u7d61\u3001${group}\u3001${hole}\u3002\u672c\u90e8\u9023\u7d61\u3001${group}\u3001${hole}\u3002`;
+  }
+
+  function officeSignature(notice) {
+    return [
+      'office',
+      textOf(notice?.id),
+      textOf(notice?.type),
+      textOf(notice?.groupId),
+      textOf(notice?.groupName),
+      textOf(notice?.hole),
+      textOf(notice?.playerId),
+      textOf(notice?.playerName),
+      textOf(notice?.time),
+      textOf(notice?.message),
+      textOf(notice?.status)
+    ].join('|');
+  }
+
+  const previousQueue = window.v141QueueNoticeSpeech;
+  window.v141QueueNoticeSpeech = function(notice) {
+    if (!isOfficeNotice(notice)) {
+      if (typeof previousQueue === 'function') return previousQueue.apply(this, arguments);
+      return;
+    }
+
+    const sig = officeSignature(notice);
+    const text = officeSpeechText(notice);
+    console.log('[v16.4.14 HQ voice] \u901a\u77e5\u691c\u77e5', {
+      id: notice?.id,
+      type: notice?.type,
+      kind: 'office',
+      signature: sig
+    });
+    console.log('[v16.4.14 HQ voice] \u8aad\u307f\u4e0a\u3052\u6587', { text });
+
+    if (isDoneNotice(notice) || spokenOfficeSignatures.has(sig)) return;
+    if (!isVoiceEnabled()) {
+      console.log('[v16.4.14 HQ voice] voice disabled; office notice not spoken', { id: notice?.id, type: notice?.type, signature: sig });
+      return;
+    }
+    spokenOfficeSignatures.add(sig);
+    if (typeof window.v141Speak === 'function') window.v141Speak(text);
   };
 })();
 </script>
