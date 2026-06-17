@@ -1915,6 +1915,39 @@ function loadScorerCurrentHole(groupId) {
   }
 }
 
+function scorerHoleSequenceForGroup(group) {
+  if (!group) return Array.from({ length: 18 }, (_, i) => i + 1);
+  return (typeof holeSequence === "function")
+    ? holeSequence(group.startHole || 1).map(Number)
+    : Array.from({ length: 18 }, (_, i) => i + 1);
+}
+
+function resolveScorerCurrentHole(group, fallbackHole) {
+  const seq = scorerHoleSequenceForGroup(group);
+  const savedHole = group ? loadScorerCurrentHole(group.id) : null;
+  const candidates = [savedHole, fallbackHole, state.selectedHole, group?.startHole, 1].map(Number);
+  const hole = candidates.find(h => h && h >= 1 && h <= 18 && seq.includes(h));
+  return hole || seq[0] || 1;
+}
+
+function captureScorerDeviceCursor() {
+  const groupId = Number(fixedGroupIdFromUrl || state.deviceGroupId || state.selectedGroupId || 0);
+  if (!groupId) return null;
+  const group = state.groups?.find(g => Number(g.id) === groupId);
+  const hole = group ? resolveScorerCurrentHole(group, state.selectedHole) : Number(state.selectedHole || 0);
+  return { groupId, hole };
+}
+
+function restoreScorerDeviceCursor(cursor) {
+  if (!cursor || !cursor.groupId) return;
+  const group = state.groups?.find(g => Number(g.id) === Number(cursor.groupId));
+  if (!group) return;
+  state.deviceGroupId = Number(group.id);
+  state.selectedGroupId = Number(group.id);
+  state.selectedHole = resolveScorerCurrentHole(group, cursor.hole);
+  saveScorerCurrentHole(group.id, state.selectedHole);
+}
+
 function applyFixedGroupFromUrl() {
   const gid = fixedGroupId();
   if (!gid) return;
@@ -1925,17 +1958,8 @@ function applyFixedGroupFromUrl() {
     // スコアラー端末では「現在ホール」は端末ごとに保持する。
     // Firebase更新や本部操作で全体state.selectedHoleが1Hに戻っても、
     // 端末に保存した現在ホールを優先して復元する。
-    const seq = (typeof holeSequence === "function") ? holeSequence(group.startHole || 1).map(Number) : Array.from({length:18}, (_,i)=>i+1);
-    const savedHole = loadScorerCurrentHole(group.id);
-    const currentHole = Number(state.selectedHole);
-    if (savedHole && seq.includes(savedHole)) {
-      state.selectedHole = savedHole;
-    } else if (!currentHole || !seq.includes(currentHole)) {
-      state.selectedHole = group.startHole || 1;
-      saveScorerCurrentHole(group.id, state.selectedHole);
-    } else {
-      saveScorerCurrentHole(group.id, currentHole);
-    }
+    state.selectedHole = resolveScorerCurrentHole(group, state.selectedHole);
+    saveScorerCurrentHole(group.id, state.selectedHole);
 
     // 担当組・現在ホールは端末状態なので、Firebaseへ再送信しない。
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -2102,9 +2126,11 @@ function initFirebaseSync() {
         return;
       }
 
+      const scorerCursor = captureScorerDeviceCursor();
       applyingRemoteState = true;
       state = data.state;
       normalizeLoadedState();
+      restoreScorerDeviceCursor(scorerCursor);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderAllScreens();
       applyingRemoteState = false;
@@ -2173,9 +2199,11 @@ function pullRemoteStateNow() {
       return;
     }
 
+    const scorerCursor = captureScorerDeviceCursor();
     applyingRemoteState = true;
     state = data.state;
     normalizeLoadedState();
+    restoreScorerDeviceCursor(scorerCursor);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAllScreens();
     applyingRemoteState = false;
@@ -3123,7 +3151,7 @@ function setDeviceGroup() {
     state.assignedDeviceGroupIds.push(group.id);
   }
   state.selectedGroupId = group.id;
-  state.selectedHole = group.startHole || 1;
+  state.selectedHole = resolveScorerCurrentHole(group, group.startHole || 1);
   saveScorerCurrentHole(group.id, state.selectedHole);
   pendingDeviceGroupId = null;
   saveState();
@@ -5714,7 +5742,7 @@ function v152ApplyQrAutoLogin() {
   if (!state.assignedDeviceGroupIds) state.assignedDeviceGroupIds = [];
   if (!state.assignedDeviceGroupIds.some(id => Number(id) === Number(group.id))) state.assignedDeviceGroupIds.push(group.id);
   state.selectedGroupId = group.id;
-  state.selectedHole = group.startHole || 1;
+  state.selectedHole = resolveScorerCurrentHole(group, group.startHole || 1);
   saveScorerCurrentHole(group.id, state.selectedHole);
   state.deviceLock.lockedAt = state.deviceLock.lockedAt || new Date().toISOString();
   state.deviceLock.tournamentId = FIREBASE_TOURNAMENT_ID;
@@ -6341,7 +6369,7 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
         state.selectedGroupId = Number(group.id);
         const savedHole = (typeof loadScorerCurrentHole === 'function') ? loadScorerCurrentHole(group.id) : null;
         if (savedHole) state.selectedHole = savedHole;
-        if (!state.selectedHole) state.selectedHole = group.startHole || 1;
+        state.selectedHole = resolveScorerCurrentHole(group, state.selectedHole || group.startHole || 1);
         if (typeof saveScorerCurrentHole === 'function') saveScorerCurrentHole(group.id, state.selectedHole);
         if (!group.mode) group.mode = 'test';
       }
@@ -6425,7 +6453,9 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
   function saveUrlLock(){
     const gid=urlGroup(); if(!gid) return null;
     const group=(window.state&&state.groups||[]).find(g=>Number(g.id)===gid) || {id:gid,startHole:1,name:'第'+gid+'組'};
-    const lock={version:VERSION,deviceGroupId:gid,selectedGroupId:gid,selectedHole:group.startHole||1,tournamentId:currentTournament(),tournamentName:currentTournament(),lockedAt:new Date().toISOString(),loginCode:(window.state&&state.deviceLock&&state.deviceLock.loginCode)||''};
+    const oldLock=getLock();
+    const savedHole=(typeof resolveScorerCurrentHole==='function')?resolveScorerCurrentHole(group,oldLock&&oldLock.selectedHole):((oldLock&&oldLock.selectedHole)||group.startHole||1);
+    const lock={version:VERSION,deviceGroupId:gid,selectedGroupId:gid,selectedHole:savedHole,tournamentId:currentTournament(),tournamentName:currentTournament(),lockedAt:(oldLock&&oldLock.lockedAt)||new Date().toISOString(),loginCode:(window.state&&state.deviceLock&&state.deviceLock.loginCode)||(oldLock&&oldLock.loginCode)||''};
     localStorage.setItem(LOCK_KEY, JSON.stringify(lock)); return lock;
   }
   function applyLock(){
@@ -6434,7 +6464,9 @@ body.v1644-scorer-flow #fixedGroupNotice.show { display:block !important; }
       if(!lock || !normId(lock.deviceGroupId) || !window.state) return false;
       const gid=normId(lock.deviceGroupId);
       const group=(state.groups||[]).find(g=>Number(g.id)===gid);
-      state.deviceGroupId=gid; state.selectedGroupId=gid; state.selectedHole=state.selectedHole||lock.selectedHole||(group&&group.startHole)||1;
+      const restoredHole=(typeof resolveScorerCurrentHole==='function')?resolveScorerCurrentHole(group,lock.selectedHole):(lock.selectedHole||state.selectedHole||(group&&group.startHole)||1);
+      state.deviceGroupId=gid; state.selectedGroupId=gid; state.selectedHole=restoredHole;
+      if(group && typeof saveScorerCurrentHole==='function') saveScorerCurrentHole(group.id,state.selectedHole);
       if(!state.deviceLock) state.deviceLock={};
       Object.assign(state.deviceLock,{unlockPassword:'000000',lockedAt:state.deviceLock.lockedAt||lock.lockedAt||new Date().toISOString(),lockedBy:VERSION,tournamentId:lock.tournamentId||currentTournament(),tournamentName:lock.tournamentName||lock.tournamentId||currentTournament()});
       if(lock.loginCode && !state.deviceLock.loginCode) state.deviceLock.loginCode=lock.loginCode;
