@@ -1,7 +1,7 @@
 {
-  "name": "PGA Score v16.5.1",
-  "short_name": "PGA Score v16.5.1",
-  "start_url": "./index.html?v=1651",
+  "name": "PGA Score v16.6.0",
+  "short_name": "PGA Score v16.6.0",
+  "start_url": "./index.html?v=1660",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f3f7f4",
