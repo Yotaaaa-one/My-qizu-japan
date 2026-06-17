@@ -6491,12 +6491,27 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
 <script id="v16414-hq-voice-fix-signature">
 (function(){
   const VERSION = 'v16.4.14';
+  const VOICE_ENABLE_KEY = 'pga_score_hq_voice_notifications_enabled_v16414';
   const spokenSignatures = new Set();
   const voiceQueue = [];
   let speaking = false;
 
   function textOf(value) {
     return String(value == null ? '' : value);
+  }
+
+  function isVoiceEnabled() {
+    try {
+      return localStorage.getItem(VOICE_ENABLE_KEY) === '1';
+    } catch(e) {
+      return false;
+    }
+  }
+
+  function setVoiceEnabled(enabled) {
+    try {
+      localStorage.setItem(VOICE_ENABLE_KEY, enabled ? '1' : '0');
+    } catch(e) {}
   }
 
   function noticeClass(notice) {
@@ -6589,14 +6604,11 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
 
   function speak(text, done) {
     try {
-      if (typeof v141Speak === 'function') {
-        v141Speak(text, done);
-        return;
-      }
       if (!window.speechSynthesis) {
         if (done) done();
         return;
       }
+      try { window.speechSynthesis.resume(); } catch(e) {}
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'ja-JP';
       utter.rate = 0.95;
@@ -6604,16 +6616,31 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
       utter.volume = 1.0;
       utter.onend = () => { if (done) done(); };
       utter.onerror = () => { if (done) done(); };
+      console.log('[v16.4.14 HQ voice] speechSynthesis.speak', { text });
       window.speechSynthesis.speak(utter);
     } catch(e) {
+      console.warn('[v16.4.14 HQ voice] speech failed', e);
       if (done) done();
     }
+  }
+
+  function enableVoiceNotifications() {
+    setVoiceEnabled(true);
+    try { if (typeof v141EnableAudio === 'function') v141EnableAudio(); } catch(e) {}
+    try { if (window.speechSynthesis) window.speechSynthesis.resume(); } catch(e) {}
+    speak('\u97f3\u58f0\u901a\u77e5\u3092\u6709\u52b9\u5316\u3057\u307e\u3057\u305f\u3002', () => {});
+    renderEnableButton();
+    setTimeout(scanNotices, 500);
   }
 
   function processQueue() {
     if (speaking) return;
     const notice = voiceQueue.shift();
     if (!notice) return;
+    if (!isVoiceEnabled()) {
+      speaking = false;
+      return;
+    }
     speaking = true;
     try { if (typeof v141Beep === 'function') v141Beep('notice'); } catch(e) {}
     setTimeout(() => {
@@ -6621,7 +6648,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
         speaking = false;
         setTimeout(processQueue, 250);
       });
-    }, 760);
+    }, 300);
   }
 
   function queueNotice(notice) {
@@ -6629,6 +6656,15 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     if (!kind || isDoneNotice(notice)) return;
     const signature = noticeSignature(notice);
     if (spokenSignatures.has(signature)) return;
+    if (!isVoiceEnabled()) {
+      console.log('[v16.4.14 HQ voice] voice disabled; notice not spoken yet', {
+        id: notice?.id,
+        type: notice?.type,
+        kind,
+        signature
+      });
+      return;
+    }
     spokenSignatures.add(signature);
     console.log('[v16.4.14 HQ voice] queued notice', {
       id: notice?.id,
@@ -6648,6 +6684,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
   }
 
   window.v16414ScanHqVoiceNotices = scanNotices;
+  window.v16414EnableHqVoiceNotifications = enableVoiceNotifications;
   window.v16414HqVoiceNoticeKind = noticeKind;
   window.v16414HqVoiceNoticeSignature = noticeSignature;
   window.v141IsHqVoiceTerminal = function() {
@@ -6680,8 +6717,55 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     };
   }
 
-  window.addEventListener('DOMContentLoaded', function(){ setTimeout(scanNotices, 0); });
-  window.addEventListener('load', function(){ setTimeout(scanNotices, 300); });
+  function renderEnableButton() {
+    let wrap = document.getElementById('v16414HqVoiceEnableWrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'v16414HqVoiceEnableWrap';
+      wrap.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:220;background:#fff;border:1px solid #93c5fd;border-radius:14px;box-shadow:0 12px 34px rgba(15,23,42,.20);padding:10px;max-width:260px;';
+      document.body.appendChild(wrap);
+    }
+    const enabled = isVoiceEnabled();
+    wrap.innerHTML = `
+      <button id="v16414HqVoiceEnableBtn" class="${enabled ? 'ghost' : 'blue'}" type="button" style="width:100%;padding:10px 12px;border-radius:12px;">
+        ${enabled ? '\u97f3\u58f0\u901a\u77e5\uff1a\u6709\u52b9' : '\u97f3\u58f0\u901a\u77e5\u3092\u6709\u52b9\u5316'}
+      </button>
+      <div class="small" style="margin-top:6px;color:#475467;">${enabled ? '\u901a\u77e5\u53d7\u4fe1\u6642\u306b\u8aad\u307f\u4e0a\u3052\u307e\u3059' : '\u6700\u521d\u306b\u4e00\u5ea6\u62bc\u3057\u3066\u304f\u3060\u3055\u3044'}</div>
+    `;
+    const btn = document.getElementById('v16414HqVoiceEnableBtn');
+    if (btn) btn.onclick = enableVoiceNotifications;
+  }
+
+  const previousOperationPanelHtml = window.v14OperationPanelHtml;
+  if (typeof previousOperationPanelHtml === 'function') {
+    window.v14OperationPanelHtml = function(compact = false) {
+      const base = previousOperationPanelHtml.apply(this, arguments);
+      const enabled = isVoiceEnabled();
+      const extra = `
+        <div class="v14Toolbar">
+          <button class="${enabled ? 'ghost' : 'blue'}" id="v16414HqVoiceEnablePanelBtn" type="button">
+            ${enabled ? '\u97f3\u58f0\u901a\u77e5\uff1a\u6709\u52b9' : '\u97f3\u58f0\u901a\u77e5\u3092\u6709\u52b9\u5316'}
+          </button>
+        </div>
+      `;
+      return base + extra;
+    };
+  }
+
+  const previousRenderV14OperationPanel = window.renderV14OperationPanel;
+  if (typeof previousRenderV14OperationPanel === 'function') {
+    window.renderV14OperationPanel = function() {
+      const result = previousRenderV14OperationPanel.apply(this, arguments);
+      const btn = document.getElementById('v16414HqVoiceEnablePanelBtn');
+      if (btn) btn.onclick = enableVoiceNotifications;
+      renderEnableButton();
+      return result;
+    };
+  }
+
+  window.addEventListener('DOMContentLoaded', function(){ renderEnableButton(); setTimeout(scanNotices, 0); });
+  window.addEventListener('load', function(){ renderEnableButton(); setTimeout(scanNotices, 300); setTimeout(renderEnableButton, 1000); });
+  setTimeout(renderEnableButton, 100);
 })();
 </script>
 
