@@ -1,0 +1,222 @@
+:root {
+  --score-under-color: #d92d20;
+  --score-even-color: #000000;
+  --score-over-color: #2563eb;
+  --ranking-panel-bg: #eeeeee;
+  --ranking-panel-text: #111827;
+  --ranking-panel-muted: #4b5563;
+  --ranking-panel-line: #cfd4dc;
+  --ranking-panel-card: #ffffff;
+  --ranking-panel-soft: #f8fafc;
+  --ranking-accent: #073b24;
+  --ranking-favorite: #d8a928;
+}
+
+.score-under,
+.underPar {
+  color: var(--score-under-color) !important;
+  font-weight: 900;
+}
+
+.score-even,
+.evenPar {
+  color: var(--score-even-color) !important;
+  font-weight: 900;
+}
+
+.score-over,
+.overPar {
+  color: var(--score-over-color) !important;
+  font-weight: 900;
+}
+
+.score-under *,
+.underPar *,
+.score-even *,
+.evenPar *,
+.score-over *,
+.overPar * {
+  color: inherit !important;
+}
+
+#publicScreen .publicBoard,
+#scorerRankingScreen .publicBoard {
+  background: var(--ranking-panel-bg);
+  color: var(--ranking-panel-text);
+  box-shadow: 0 18px 46px rgba(16, 24, 40, .16);
+}
+
+#publicScreen .publicHeader,
+#scorerRankingScreen .publicHeader {
+  border-bottom-color: var(--ranking-panel-line);
+}
+
+#publicScreen .publicHeader h2,
+#scorerRankingScreen .publicHeader h2,
+#publicScreen .publicTable td,
+#scorerRankingScreen .scorerRankCard {
+  color: var(--ranking-panel-text);
+}
+
+#publicScreen .publicHeader p,
+#scorerRankingScreen .publicHeader p,
+#publicScreen .publicStatus,
+#scorerRankingScreen .scorerRankAff {
+  color: var(--ranking-panel-muted);
+}
+
+#publicScreen .publicTime,
+#scorerRankingScreen .publicTime {
+  color: var(--ranking-panel-muted);
+}
+
+#publicScreen .publicTable th {
+  background: var(--ranking-panel-soft);
+  color: var(--ranking-accent);
+  border-bottom-color: var(--ranking-panel-line);
+}
+
+#publicScreen .publicTable td {
+  border-bottom-color: #d7dbe2;
+}
+
+#publicScreen .publicRank,
+#publicScreen .hbhLabel,
+#scorerRankingScreen .scorerRankNo {
+  color: var(--ranking-accent);
+}
+
+#publicScreen .playerLink {
+  color: var(--ranking-panel-text);
+}
+
+#publicScreen .favBtn,
+#scorerRankingScreen .scorerRankFav {
+  color: var(--ranking-favorite);
+}
+
+#publicScreen .favoriteBlock,
+#scorerRankingScreen .scorerRankFavoriteBlock {
+  background: var(--ranking-panel-soft);
+  border-color: var(--ranking-panel-line);
+}
+
+#publicScreen .favoriteBlock h3,
+#scorerRankingScreen .scorerRankFavoriteBlock h3 {
+  color: var(--ranking-accent);
+}
+
+#publicScreen .hbhRow td {
+  background: var(--ranking-panel-soft);
+}
+
+#publicScreen .hbhBox,
+#scorerRankingScreen .scorerRankDetail {
+  background: var(--ranking-panel-card);
+  border-color: var(--ranking-panel-line);
+}
+
+#publicScreen .hbhTable,
+#publicScreen .hbhTable td,
+#publicScreen .hbhTable th,
+#scorerRankingScreen .scorerRankHbhTable,
+#scorerRankingScreen .scorerRankHbhTable td,
+#scorerRankingScreen .scorerRankHbhTable th {
+  color: var(--ranking-panel-text);
+  border-bottom-color: #d7dbe2;
+}
+
+#scorerRankingScreen .scorerRankList {
+  display: grid;
+  gap: 10px;
+}
+
+#scorerRankingScreen .scorerRankCard {
+  background: var(--ranking-panel-card);
+  border: 1px solid var(--ranking-panel-line);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+#scorerRankingScreen .scorerRankCard.mine {
+  border-color: #86efac;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .10);
+}
+
+#scorerRankingScreen .scorerRankTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#scorerRankingScreen .scorerRankTop > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+#scorerRankingScreen .scorerRankNo {
+  min-width: 48px;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+#scorerRankingScreen .scorerRankActions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+#scorerRankingScreen .scorerRankFav,
+#scorerRankingScreen .scorerRankNameBtn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  transform: none;
+}
+
+#scorerRankingScreen .scorerRankFav {
+  min-width: 36px;
+  padding: 0 8px 0 0;
+  font-size: 1.05em;
+  vertical-align: middle;
+}
+
+#scorerRankingScreen .scorerRankNameBtn {
+  color: var(--ranking-panel-text);
+  padding: 0;
+  font: inherit;
+  font-weight: 900;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  overflow-wrap: anywhere;
+}
+
+#scorerRankingScreen .scorerRankStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+#scorerRankingScreen .scorerRankStat {
+  background: var(--ranking-panel-soft);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  color: var(--ranking-panel-muted);
+  font-weight: 900;
+  padding: 8px;
+  text-align: center;
+}
+
+#scorerRankingScreen .scorerRankStat strong {
+  display: block;
+  color: var(--ranking-panel-text);
+  font-size: 20px;
+  margin-top: 2px;
+}

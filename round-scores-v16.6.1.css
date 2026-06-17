@@ -1,0 +1,66 @@
+:root {
+  --v1661-round-bg: #eef7f1;
+  --v1661-round-line: #b7e0c2;
+  --v1661-round-text: #073b24;
+  --v1661-cut-bg: #fef3f2;
+  --v1661-cut-line: #fda29b;
+  --v1661-cut-text: #b42318;
+}
+
+.v1661RoundScoreBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--v1661-round-line);
+  background: var(--v1661-round-bg);
+  color: var(--v1661-round-text);
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.v1661RoundScoreNote {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--v1661-round-line);
+  background: var(--v1661-round-bg);
+  color: var(--v1661-round-text);
+  font-weight: 900;
+}
+
+.v1661RoundDone {
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid #d0d5dd;
+  background: #f8fafc;
+  color: #111827;
+  font-weight: 900;
+}
+
+.v1661CutList {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--v1661-cut-line);
+  background: var(--v1661-cut-bg);
+  color: var(--v1661-cut-text);
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+.v1661CutBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--v1661-cut-bg);
+  border: 1px solid var(--v1661-cut-line);
+  color: var(--v1661-cut-text);
+  font-weight: 900;
+}

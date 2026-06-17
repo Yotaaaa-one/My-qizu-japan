@@ -1,0 +1,84 @@
+:root {
+  --v166-panel-bg: #f8fafc;
+  --v166-panel-line: #d0d5dd;
+  --v166-panel-text: #111827;
+  --v166-panel-muted: #667085;
+  --v166-accent: #0b6b3a;
+  --v166-cut-bg: #fff7ed;
+  --v166-cut-line: #fdba74;
+}
+
+.v166RoundCutCard {
+  border-left: 7px solid var(--v166-accent);
+}
+
+.v166RoundCutGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (min-width: 860px) {
+  .v166RoundCutGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.v166RoundCutPreview {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--v166-panel-line);
+  background: var(--v166-panel-bg);
+  color: var(--v166-panel-text);
+  font-weight: 900;
+  line-height: 1.7;
+}
+
+.v166RoundCutPreview span {
+  display: inline-block;
+  margin-right: 12px;
+}
+
+.v166RoundCutBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--v166-panel-line);
+  background: var(--v166-panel-bg);
+  color: var(--v166-panel-text);
+  font-weight: 900;
+}
+
+.v166RoundCutBanner .v166RoundText {
+  color: var(--v166-accent);
+  letter-spacing: .02em;
+}
+
+.v166RoundCutBanner .v166CutText {
+  color: var(--v166-panel-text);
+}
+
+.v166RoundCutBanner .v166CutLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--v166-cut-line);
+  background: var(--v166-cut-bg);
+}
+
+#publicScreen .v166RoundCutBanner,
+#scorerRankingScreen .v166RoundCutBanner {
+  background: #ffffff;
+}
+
+#scorerScreen > .v166RoundCutBanner {
+  margin-bottom: 10px;
+}
