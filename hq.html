@@ -6514,6 +6514,50 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     } catch(e) {}
   }
 
+  function installCommonSpeak() {
+    window.v141Speak = function(text, onEnd) {
+      console.log('[v16.4.14 HQ voice] speak関数呼び出し', { text });
+      try {
+        if (!window.speechSynthesis || !text) {
+          console.warn('[v16.4.14 HQ voice] 読み上げ失敗', { reason: 'speechSynthesis unavailable or empty text', text });
+          if (onEnd) onEnd();
+          return;
+        }
+        const synth = window.speechSynthesis;
+        try { synth.cancel(); } catch(e) { console.warn('[v16.4.14 HQ voice] speechSynthesis.cancel failed', e); }
+        try { synth.resume(); } catch(e) { console.warn('[v16.4.14 HQ voice] speechSynthesis.resume failed', e); }
+
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'ja-JP';
+        const voices = typeof synth.getVoices === 'function' ? synth.getVoices() : [];
+        const jaVoice = voices.find(v => v.lang === 'ja-JP') || voices.find(v => /^ja[-_]?/i.test(v.lang || ''));
+        if (jaVoice) utter.voice = jaVoice;
+        utter.rate = 0.95;
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
+        utter.onend = () => { if (onEnd) onEnd(); };
+        utter.onerror = event => {
+          console.warn('[v16.4.14 HQ voice] 読み上げ失敗', event);
+          if (onEnd) onEnd();
+        };
+
+        setTimeout(() => {
+          try {
+            synth.resume();
+            console.log('[v16.4.14 HQ voice] speechSynthesis.speak', { text, voice: utter.voice?.name || null });
+            synth.speak(utter);
+          } catch(e) {
+            console.warn('[v16.4.14 HQ voice] 読み上げ失敗', e);
+            if (onEnd) onEnd();
+          }
+        }, 300);
+      } catch(e) {
+        console.warn('[v16.4.14 HQ voice] 読み上げ失敗', e);
+        if (onEnd) onEnd();
+      }
+    };
+  }
+
   function noticeClass(notice) {
     try {
       return typeof noticeTypeClass === 'function' ? noticeTypeClass(textOf(notice?.type)) : '';
@@ -6603,25 +6647,8 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
   }
 
   function speak(text, done) {
-    try {
-      if (!window.speechSynthesis) {
-        if (done) done();
-        return;
-      }
-      try { window.speechSynthesis.resume(); } catch(e) {}
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ja-JP';
-      utter.rate = 0.95;
-      utter.pitch = 1.0;
-      utter.volume = 1.0;
-      utter.onend = () => { if (done) done(); };
-      utter.onerror = () => { if (done) done(); };
-      console.log('[v16.4.14 HQ voice] speechSynthesis.speak', { text });
-      window.speechSynthesis.speak(utter);
-    } catch(e) {
-      console.warn('[v16.4.14 HQ voice] speech failed', e);
-      if (done) done();
-    }
+    installCommonSpeak();
+    window.v141Speak(text, done);
   }
 
   function enableVoiceNotifications() {
@@ -6630,7 +6657,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     try { if (window.speechSynthesis) window.speechSynthesis.resume(); } catch(e) {}
     speak('\u97f3\u58f0\u901a\u77e5\u3092\u6709\u52b9\u5316\u3057\u307e\u3057\u305f\u3002', () => {});
     renderEnableButton();
-    setTimeout(scanNotices, 500);
+    setTimeout(scanNotices, 1400);
   }
 
   function processQueue() {
@@ -6643,18 +6670,25 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     }
     speaking = true;
     try { if (typeof v141Beep === 'function') v141Beep('notice'); } catch(e) {}
-    setTimeout(() => {
-      speak(speechText(notice), () => {
-        speaking = false;
-        setTimeout(processQueue, 250);
-      });
-    }, 300);
+    const text = speechText(notice);
+    console.log('[v16.4.14 HQ voice] 読み上げ文', { text });
+    speak(text, () => {
+      speaking = false;
+      setTimeout(processQueue, 250);
+    });
   }
 
   function queueNotice(notice) {
     const kind = noticeKind(notice);
     if (!kind || isDoneNotice(notice)) return;
     const signature = noticeSignature(notice);
+    console.log('[v16.4.14 HQ voice] 通知検知', {
+      id: notice?.id,
+      type: notice?.type,
+      kind,
+      signature
+    });
+    console.log('[v16.4.14 HQ voice] 読み上げ文', { text: speechText(notice) });
     if (spokenSignatures.has(signature)) return;
     if (!isVoiceEnabled()) {
       console.log('[v16.4.14 HQ voice] voice disabled; notice not spoken yet', {
@@ -6763,6 +6797,7 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
     };
   }
 
+  installCommonSpeak();
   window.addEventListener('DOMContentLoaded', function(){ renderEnableButton(); setTimeout(scanNotices, 0); });
   window.addEventListener('load', function(){ renderEnableButton(); setTimeout(scanNotices, 300); setTimeout(renderEnableButton, 1000); });
   setTimeout(renderEnableButton, 100);
