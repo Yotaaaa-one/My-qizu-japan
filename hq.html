@@ -6488,5 +6488,202 @@ body.pga-v16411-hq[data-tab="setup"] #setupScreen {
 })();
 </script>
 
+<script id="v16414-hq-voice-fix-signature">
+(function(){
+  const VERSION = 'v16.4.14';
+  const spokenSignatures = new Set();
+  const voiceQueue = [];
+  let speaking = false;
+
+  function textOf(value) {
+    return String(value == null ? '' : value);
+  }
+
+  function noticeClass(notice) {
+    try {
+      return typeof noticeTypeClass === 'function' ? noticeTypeClass(textOf(notice?.type)) : '';
+    } catch(e) {
+      return '';
+    }
+  }
+
+  function noticeKind(notice) {
+    const type = textOf(notice?.type);
+    const message = textOf(notice?.message);
+    const haystack = [type, message, noticeClass(notice)].join('|');
+    if (
+      haystack.includes('referee') ||
+      haystack.includes('\u7af6\u6280\u59d4\u54e1') ||
+      haystack.includes('\u8981\u8acb') ||
+      haystack.includes('蟋泌藤') ||
+      haystack.includes('隕∬ｫ')
+    ) return 'referee';
+    if (
+      haystack.includes('withdraw') ||
+      haystack.includes('\u68c4\u6a29') ||
+      haystack.includes('譽') ||
+      haystack.includes('ｨｩ')
+    ) return 'withdraw';
+    return '';
+  }
+
+  function isDoneNotice(notice) {
+    const status = textOf(notice?.status);
+    return status === '\u5b8c\u4e86' || status.includes('螳御');
+  }
+
+  function groupText(notice) {
+    if (notice?.groupId) return `\u7b2c${notice.groupId}\u7d44`;
+    const raw = textOf(notice?.groupName).trim();
+    const numeric = raw.match(/\d+/);
+    if (numeric) return `\u7b2c${numeric[0]}\u7d44`;
+    return raw || '\u7d44\u672a\u78ba\u8a8d';
+  }
+
+  function holeText(notice) {
+    const hole = Number(notice?.hole || 0);
+    return hole ? `${hole}\u756a\u30db\u30fc\u30eb` : '\u30db\u30fc\u30eb\u672a\u78ba\u8a8d';
+  }
+
+  function speechText(notice) {
+    const group = groupText(notice);
+    const hole = holeText(notice);
+    if (noticeKind(notice) === 'withdraw') {
+      return `\u68c4\u6a29\u9023\u7d61\u3001${group}\u3001${hole}\u3002\u68c4\u6a29\u9023\u7d61\u3001${group}\u3001${hole}\u3002`;
+    }
+    return `\u7af6\u6280\u59d4\u54e1\u8981\u8acb\u3001${group}\u3001${hole}\u3002\u7af6\u6280\u59d4\u54e1\u8981\u8acb\u3001${group}\u3001${hole}\u3002`;
+  }
+
+  function noticeSignature(notice) {
+    return [
+      noticeKind(notice),
+      textOf(notice?.id),
+      textOf(notice?.type),
+      textOf(notice?.groupId),
+      textOf(notice?.groupName),
+      textOf(notice?.hole),
+      textOf(notice?.playerId),
+      textOf(notice?.playerName),
+      textOf(notice?.time),
+      textOf(notice?.message),
+      textOf(notice?.status)
+    ].join('|');
+  }
+
+  function logNoticeTypes(notices) {
+    try {
+      console.log('[v16.4.14 HQ voice] state.notices type values', notices.map(n => ({
+        id: n?.id,
+        type: n?.type,
+        className: noticeClass(n),
+        kind: noticeKind(n),
+        status: n?.status,
+        groupId: n?.groupId,
+        groupName: n?.groupName,
+        hole: n?.hole,
+        time: n?.time,
+        signature: noticeSignature(n)
+      })));
+    } catch(e) {}
+  }
+
+  function speak(text, done) {
+    try {
+      if (typeof v141Speak === 'function') {
+        v141Speak(text, done);
+        return;
+      }
+      if (!window.speechSynthesis) {
+        if (done) done();
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ja-JP';
+      utter.rate = 0.95;
+      utter.pitch = 1.0;
+      utter.volume = 1.0;
+      utter.onend = () => { if (done) done(); };
+      utter.onerror = () => { if (done) done(); };
+      window.speechSynthesis.speak(utter);
+    } catch(e) {
+      if (done) done();
+    }
+  }
+
+  function processQueue() {
+    if (speaking) return;
+    const notice = voiceQueue.shift();
+    if (!notice) return;
+    speaking = true;
+    try { if (typeof v141Beep === 'function') v141Beep('notice'); } catch(e) {}
+    setTimeout(() => {
+      speak(speechText(notice), () => {
+        speaking = false;
+        setTimeout(processQueue, 250);
+      });
+    }, 760);
+  }
+
+  function queueNotice(notice) {
+    const kind = noticeKind(notice);
+    if (!kind || isDoneNotice(notice)) return;
+    const signature = noticeSignature(notice);
+    if (spokenSignatures.has(signature)) return;
+    spokenSignatures.add(signature);
+    console.log('[v16.4.14 HQ voice] queued notice', {
+      id: notice?.id,
+      type: notice?.type,
+      kind,
+      signature,
+      speechText: speechText(notice)
+    });
+    voiceQueue.push(notice);
+    processQueue();
+  }
+
+  function scanNotices() {
+    const notices = Array.isArray(window.state?.notices) ? window.state.notices : [];
+    logNoticeTypes(notices);
+    notices.slice().reverse().forEach(queueNotice);
+  }
+
+  window.v16414ScanHqVoiceNotices = scanNotices;
+  window.v16414HqVoiceNoticeKind = noticeKind;
+  window.v16414HqVoiceNoticeSignature = noticeSignature;
+  window.v141IsHqVoiceTerminal = function() {
+    return !(typeof isScorerMode === 'function' && isScorerMode());
+  };
+  window.v141NoticeSpeechText = speechText;
+  window.v141QueueNoticeSpeech = function(notice) {
+    console.log('[v16.4.14 HQ voice] legacy id-based queue bypassed', {
+      id: notice?.id,
+      type: notice?.type,
+      signature: noticeSignature(notice)
+    });
+  };
+
+  const previousRenderNotices = window.renderNotices;
+  if (typeof previousRenderNotices === 'function') {
+    window.renderNotices = function() {
+      const result = previousRenderNotices.apply(this, arguments);
+      setTimeout(scanNotices, 0);
+      return result;
+    };
+  }
+
+  const previousRenderAllScreens = window.renderAllScreens;
+  if (typeof previousRenderAllScreens === 'function') {
+    window.renderAllScreens = function() {
+      const result = previousRenderAllScreens.apply(this, arguments);
+      setTimeout(scanNotices, 0);
+      return result;
+    };
+  }
+
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(scanNotices, 0); });
+  window.addEventListener('load', function(){ setTimeout(scanNotices, 300); });
+})();
+</script>
+
 </body>
 </html>
