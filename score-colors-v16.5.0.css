@@ -1,0 +1,32 @@
+:root {
+  --score-under-color: #d92d20;
+  --score-even-color: #000000;
+  --score-over-color: #2563eb;
+}
+
+.score-under,
+.underPar {
+  color: var(--score-under-color) !important;
+  font-weight: 900;
+}
+
+.score-even,
+.evenPar {
+  color: var(--score-even-color) !important;
+  font-weight: 900;
+}
+
+.score-over,
+.overPar {
+  color: var(--score-over-color) !important;
+  font-weight: 900;
+}
+
+.score-under *,
+.underPar *,
+.score-even *,
+.evenPar *,
+.score-over *,
+.overPar * {
+  color: inherit !important;
+}

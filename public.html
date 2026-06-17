@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PGA Score Public v16.4.13</title>
+  <title>PGA Score Public v16.5.0</title>
 
   <meta name="theme-color" content="#0b6b3a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -482,17 +482,27 @@
       color:#f6d46b;
       text-align:right;
     }
-    .underPar {
-      color:#8ff0a4;
+    :root {
+      --score-under-color:#d92d20;
+      --score-even-color:#000000;
+      --score-over-color:#2563eb;
+    }
+    .score-under, .underPar {
+      color:var(--score-under-color) !important;
       font-weight:900;
     }
-    .overPar {
-      color:#ffb4ab;
+    .score-even, .evenPar {
+      color:var(--score-even-color) !important;
       font-weight:900;
     }
-    .evenPar {
-      color:#f6d46b;
+    .score-over, .overPar {
+      color:var(--score-over-color) !important;
       font-weight:900;
+    }
+    .score-under *, .underPar *,
+    .score-even *, .evenPar *,
+    .score-over *, .overPar * {
+      color:inherit !important;
     }
     .monitorPlayerLink {
       background:transparent;
@@ -1195,10 +1205,11 @@ body.v163-page-hq #leaderboardTab { display:block !important; }
 body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
 .v163PageBadge { display:inline-flex; margin:12px 14px 0; padding:7px 11px; border-radius:999px; background:#eef7f1; color:#073b24; font-weight:900; border:1px solid #b7e0c2; font-size:12px; }
 </style>
+  <link rel="stylesheet" href="score-colors-v16.5.0.css" />
 </head>
 <body class="v163-page-public">
 <header>
-  <h1>一般モニター v16.4.13</h1>
+  <h1>一般モニター v16.5.0</h1>
   <p>一般モニター専用</p>
 </header>
 
@@ -3338,9 +3349,9 @@ function parDiffLabel(diff) {
 }
 
 function parDiffClass(diff) {
-  if (diff < 0) return "underPar";
-  if (diff > 0) return "overPar";
-  return "evenPar";
+  if (diff < 0) return "score-under";
+  if (diff > 0) return "score-over";
+  return "score-even";
 }
 
 function holeDiffLabel(player, hole) {
@@ -6307,5 +6318,6 @@ window.addEventListener('load', function(){ setTimeout(function(){ try { if (typ
   window.addEventListener('load', function(){ applyBuildStamp(); setTimeout(applyBuildStamp,500); setTimeout(applyBuildStamp,1500); });
 })();
 </script>
+<script src="score-colors-v16.5.0.js"></script>
 </body>
 </html>
