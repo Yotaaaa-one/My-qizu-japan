@@ -1,0 +1,915 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PGA SCORE AI LIVE MONITOR</title>
+  <link rel="stylesheet" href="./score-colors-v16.6.1.css">
+  <style>
+    :root {
+      --bg: #07110f;
+      --panel: rgba(8, 18, 17, .9);
+      --panel2: rgba(17, 31, 29, .92);
+      --line: rgba(255,255,255,.14);
+      --gold: #f5c84b;
+      --green: #1fd08d;
+      --cyan: #73dcff;
+      --text: #f8fbf7;
+      --muted: #aebbb8;
+      --danger: #ff5757;
+      --blue: #4da3ff;
+      --shadow: 0 18px 48px rgba(0,0,0,.42);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      color: var(--text);
+      background:
+        linear-gradient(115deg, rgba(6,39,30,.96), rgba(4,7,10,.96) 46%, rgba(21,24,14,.96)),
+        radial-gradient(circle at 18% 20%, rgba(31,208,141,.25), transparent 35%),
+        radial-gradient(circle at 82% 12%, rgba(245,200,75,.18), transparent 30%),
+        var(--bg);
+      font-family: "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+      letter-spacing: 0;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.45), transparent 80%);
+    }
+
+    .app {
+      width: 100vw;
+      height: 100vh;
+      padding: 24px;
+      display: grid;
+      grid-template-rows: 58px 1fr;
+      gap: 18px;
+    }
+
+    .topbar {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 18px;
+      white-space: nowrap;
+    }
+
+    .brand strong {
+      font-size: 30px;
+      color: var(--gold);
+      font-weight: 900;
+      text-shadow: 0 2px 18px rgba(245,200,75,.25);
+    }
+
+    .brand span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .live-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 0 7px rgba(255,87,87,.15), 0 0 18px rgba(255,87,87,.7);
+    }
+
+    .grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.08fr .92fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(160deg, var(--panel), var(--panel2));
+      box-shadow: var(--shadow);
+    }
+
+    .panelHeader {
+      height: 48px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.045);
+    }
+
+    .panelTitle {
+      font-size: 17px;
+      font-weight: 950;
+      color: var(--gold);
+    }
+
+    .panelMeta {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .rankingTable {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .rankingTable th {
+      padding: 10px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+
+    .rankingTable td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      font-size: 18px;
+      font-weight: 850;
+      vertical-align: middle;
+    }
+
+    .rankingTable tr:first-child td {
+      background: rgba(245,200,75,.13);
+    }
+
+    .rankNo {
+      color: var(--gold);
+      font-size: 22px;
+      width: 74px;
+    }
+
+    .playerName {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .scoreCell {
+      font-size: 24px;
+      text-align: right;
+      font-weight: 950;
+    }
+
+    .thruCell {
+      color: var(--cyan);
+      text-align: right;
+    }
+
+    .score-even { color: #f4f6f5 !important; }
+
+    .nowWrap {
+      height: calc(100% - 48px);
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 16px;
+    }
+
+    .holeBadge {
+      grid-row: 1 / span 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      border: 1px solid rgba(245,200,75,.38);
+      background: linear-gradient(180deg, rgba(245,200,75,.18), rgba(31,208,141,.08));
+    }
+
+    .holeBadge .label {
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .holeBadge .hole {
+      margin-top: 6px;
+      font-size: 76px;
+      line-height: 1;
+      font-weight: 1000;
+      color: #fff;
+    }
+
+    .holeBadge .spec {
+      margin-top: 10px;
+      display: flex;
+      gap: 12px;
+      color: var(--gold);
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .leaderBox {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 16px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.09);
+    }
+
+    .leaderBox span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .leaderBox strong {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 28px;
+      color: #fff;
+      margin-top: 3px;
+    }
+
+    .holeScores {
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .miniCard {
+      min-width: 0;
+      align-self: stretch;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(0,0,0,.22);
+      border: 1px solid rgba(255,255,255,.08);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .miniName {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .miniScore {
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 1000;
+      text-align: center;
+    }
+
+    .miniSub {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .newsList {
+      height: calc(100% - 48px);
+      padding: 16px;
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .newsItem {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    .newsTag {
+      color: #07110f;
+      background: var(--gold);
+      border-radius: 6px;
+      padding: 7px 8px;
+      font-size: 12px;
+      font-weight: 1000;
+      text-align: center;
+    }
+
+    .newsText {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 18px;
+      font-weight: 850;
+    }
+
+    .aiWrap {
+      height: calc(100% - 48px);
+      padding: 18px;
+      display: grid;
+      grid-template-columns: minmax(230px, 34%) 1fr;
+      gap: 18px;
+      align-items: end;
+    }
+
+    .characterStage {
+      position: relative;
+      min-height: 0;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .characterGlow {
+      position: absolute;
+      bottom: 10px;
+      width: 180px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(31,208,141,.22);
+      filter: blur(14px);
+    }
+
+    .character {
+      position: relative;
+      max-width: 94%;
+      max-height: 92%;
+      object-fit: contain;
+      filter: drop-shadow(0 18px 32px rgba(0,0,0,.48));
+    }
+
+    .bubble {
+      position: relative;
+      min-width: 0;
+      align-self: center;
+      padding: 26px 28px;
+      border-radius: 8px;
+      background: rgba(248,251,247,.96);
+      color: #07110f;
+      box-shadow: 0 18px 34px rgba(0,0,0,.28);
+    }
+
+    .bubble::before {
+      content: "";
+      position: absolute;
+      left: -18px;
+      bottom: 42px;
+      border-top: 14px solid transparent;
+      border-bottom: 14px solid transparent;
+      border-right: 18px solid rgba(248,251,247,.96);
+    }
+
+    .bubbleLabel {
+      color: #147655;
+      font-size: 13px;
+      font-weight: 1000;
+      margin-bottom: 10px;
+    }
+
+    .bubbleText {
+      font-size: 30px;
+      line-height: 1.35;
+      font-weight: 950;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    .empty {
+      padding: 18px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .errorLine {
+      color: #ffd2d2;
+    }
+
+    @media (max-width: 1100px) {
+      body { overflow: auto; }
+      .app { height: auto; min-height: 100vh; }
+      .grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, minmax(320px, auto)); }
+      .nowWrap { grid-template-columns: 160px 1fr; }
+      .holeScores { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .aiWrap { grid-template-columns: 190px 1fr; }
+      .bubbleText { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <strong>PGA SCORE AI LIVE</strong>
+        <span id="tournamentLabel">大会データ読込中</span>
+      </div>
+      <div class="status">
+        <span class="live-dot"></span>
+        <span id="roundLabel">Round - / -</span>
+        <span id="clockLabel">--:--:--</span>
+        <span id="syncLabel">CONNECTING</span>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="panel">
+        <div class="panelHeader">
+          <div class="panelTitle">LIVE RANKING</div>
+          <div class="panelMeta">TOP 5</div>
+        </div>
+        <table class="rankingTable">
+          <thead>
+            <tr>
+              <th style="width:78px;">順位</th>
+              <th>選手名</th>
+              <th style="width:118px;text-align:right;">SCORE</th>
+              <th style="width:96px;text-align:right;">THRU</th>
+            </tr>
+          </thead>
+          <tbody id="rankingBody">
+            <tr><td colspan="4" class="empty">ランキングを準備しています</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="panelHeader">
+          <div class="panelTitle">NOW PLAYING</div>
+          <div class="panelMeta" id="nowMeta">CURRENT HOLE</div>
+        </div>
+        <div class="nowWrap">
+          <div class="holeBadge">
+            <div class="label">HOLE</div>
+            <div class="hole" id="currentHoleLabel">-</div>
+            <div class="spec">
+              <span id="parLabel">PAR -</span>
+              <span id="yardsLabel">YDS -</span>
+            </div>
+          </div>
+          <div class="leaderBox">
+            <div>
+              <span>現在トップ選手</span>
+              <strong id="leaderName">-</strong>
+            </div>
+            <div id="leaderScore" class="scoreCell score-even">E</div>
+          </div>
+          <div id="holeScores" class="holeScores"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panelHeader">
+          <div class="panelTitle">TODAY'S NEWS</div>
+          <div class="panelMeta">RULE BASED AI</div>
+        </div>
+        <div id="newsList" class="newsList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panelHeader">
+          <div class="panelTitle">AI実況キャラ</div>
+          <div class="panelMeta">LIVE COMMENTARY</div>
+        </div>
+        <div class="aiWrap">
+          <div class="characterStage">
+            <div class="characterGlow"></div>
+            <img class="character" src="./icons/icon-512.png" alt="AI実況キャラ" onerror="this.style.display='none'">
+          </div>
+          <div class="bubble">
+            <div class="bubbleLabel">AI速報</div>
+            <div id="commentaryText" class="bubbleText">大会状況を解析しています。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script>
+    const TOURNAMENT_ID_STORAGE_KEY = "golf_score_current_tournament_id_v16_4_6";
+    const FALLBACK_TOURNAMENT_ID = "demo_tournament_v1646";
+    const firebaseConfig = {
+      apiKey: "AIzaSyCcHuDIRU8w2bcZBuXLO4dr-vdKcygNdMc",
+      authDomain: "pgascoredatebace.firebaseapp.com",
+      projectId: "pgascoredatebace",
+      storageBucket: "pgascoredatebace.firebasestorage.app",
+      messagingSenderId: "605130500501",
+      appId: "1:605130500501:web:4d77d1a6a5cd56c7336e9c",
+      measurementId: "G-23N9V3D1E0"
+    };
+
+    let state = { groups: [], coursePar: {} };
+    let snapshotReady = false;
+    let lastLeaderId = null;
+    let lastScoreMap = new Map();
+    let latestBirdieText = "";
+    let latestLeadChangeText = "";
+    let latestCommentary = "大会状況を解析しています。";
+
+    const $ = id => document.getElementById(id);
+
+    function sanitizeTournamentId(id) {
+      return String(id || "")
+        .trim()
+        .replace(/[^\w-]/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60) || FALLBACK_TOURNAMENT_ID;
+    }
+
+    function getTournamentId() {
+      const urlId = new URLSearchParams(window.location.search).get("tournament");
+      return sanitizeTournamentId(urlId || localStorage.getItem(TOURNAMENT_ID_STORAGE_KEY) || FALLBACK_TOURNAMENT_ID);
+    }
+
+    const FIREBASE_TOURNAMENT_ID = getTournamentId();
+    localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, FIREBASE_TOURNAMENT_ID);
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, c => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[c]));
+    }
+
+    function currentRound() {
+      return Math.max(1, Math.min(roundCount(), Number(state.currentRound || 1)));
+    }
+
+    function roundCount() {
+      return Math.max(1, Math.min(4, Number(state.roundCount || 1)));
+    }
+
+    function getParForHole(hole) {
+      return Number(state.coursePar?.[hole] || 4);
+    }
+
+    function getYardsForHole(hole) {
+      const value = state.courseYards?.[hole] ?? state.holeYards?.[hole] ?? state.yards?.[hole];
+      return value == null || value === "" ? "-" : value;
+    }
+
+    function allPlayers() {
+      return (state.groups || []).flatMap(group => (group.players || []).map(player => ({ group, player })));
+    }
+
+    function roundScores(player, round) {
+      const key = String(round);
+      const roundData = player.rounds?.[key] || player.rounds?.[Number(round)];
+      if (roundData?.scores) return roundData.scores;
+      if (Number(round) === 1 && player.scores) return player.scores;
+      return {};
+    }
+
+    function scoreFor(player, round, hole) {
+      const scores = roundScores(player, round);
+      const value = scores["h" + hole] ?? scores[hole];
+      return value == null || value === "" ? null : Number(value);
+    }
+
+    function completedHoles(player, round) {
+      const scores = roundScores(player, round);
+      return Object.keys(scores || {})
+        .map(k => Number(String(k).replace(/^h/, "")))
+        .filter(n => n >= 1 && n <= 18 && scoreFor(player, round, n) != null)
+        .sort((a, b) => a - b);
+    }
+
+    function playerTotals(player) {
+      let strokes = 0;
+      let par = 0;
+      let holes = 0;
+      for (let round = 1; round <= currentRound(); round += 1) {
+        completedHoles(player, round).forEach(hole => {
+          const score = scoreFor(player, round, hole);
+          if (score != null) {
+            strokes += score;
+            par += getParForHole(hole);
+            holes += 1;
+          }
+        });
+      }
+      return { strokes, par, holes, toPar: holes ? strokes - par : 0 };
+    }
+
+    function parDiffLabel(diff) {
+      if (diff === 0) return "E";
+      return diff > 0 ? "+" + diff : String(diff);
+    }
+
+    function parDiffClass(diff) {
+      if (diff < 0) return "score-under";
+      if (diff > 0) return "score-over";
+      return "score-even";
+    }
+
+    function rankingRows() {
+      const rows = allPlayers()
+        .filter(({ player }) => player.status !== "withdrawn" && player.status !== "dns")
+        .map(({ group, player }) => ({ group, player, total: playerTotals(player) }))
+        .sort((a, b) => {
+          if (a.total.toPar !== b.total.toPar) return a.total.toPar - b.total.toPar;
+          if (a.total.holes !== b.total.holes) return b.total.holes - a.total.holes;
+          return String(a.player.name || "").localeCompare(String(b.player.name || ""), "ja");
+        });
+
+      let previous = null;
+      let rank = 0;
+      rows.forEach((row, index) => {
+        if (previous === null || row.total.toPar !== previous) rank = index + 1;
+        row.rank = rank;
+        previous = row.total.toPar;
+      });
+      return rows;
+    }
+
+    function inferCurrentHole(rows) {
+      const explicit = Number(state.selectedHole || state.currentHole);
+      if (explicit >= 1 && explicit <= 18) return explicit;
+      const top = rows[0]?.player;
+      if (top) {
+        const holes = completedHoles(top, currentRound());
+        const next = Math.min(18, (holes[holes.length - 1] || 0) + 1);
+        if (next >= 1) return next;
+      }
+      const groupStart = Number((state.groups || [])[0]?.startHole || 1);
+      return groupStart >= 1 && groupStart <= 18 ? groupStart : 1;
+    }
+
+    function thruLabel(total) {
+      const holesInRound = completedHoles(total.player || total, currentRound()).length;
+      if (holesInRound >= 18) return "F";
+      return holesInRound ? String(holesInRound) : "-";
+    }
+
+    function cutLineInfo(rows) {
+      if (!state.cutEnabled) return null;
+      const cutAfterRound = Number(state.cutAfterRound || 0);
+      if (cutAfterRound && currentRound() > cutAfterRound) return null;
+      const cutPosition = Math.max(1, Number(state.cutPosition || 60));
+      if (!rows.length) return null;
+      const target = rows[Math.min(rows.length - 1, cutPosition - 1)];
+      if (!target) return null;
+      const lineScore = target.total.toPar;
+      const count = rows.filter(row => row.total.toPar <= lineScore).length;
+      return {
+        label: "予選カット：" + cutPosition + "位タイまで",
+        line: "CUT LINE " + parDiffLabel(lineScore),
+        count
+      };
+    }
+
+    function detectChanges(rows) {
+      const leader = rows[0];
+      if (leader && lastLeaderId && leader.player.id !== lastLeaderId) {
+        latestLeadChangeText = "首位が入れ替わりました！" + leader.player.name + "選手がトップです。";
+        latestCommentary = latestLeadChangeText;
+      }
+      if (leader) lastLeaderId = leader.player.id;
+
+      const nextMap = new Map();
+      allPlayers().forEach(({ player }) => {
+        for (let hole = 1; hole <= 18; hole += 1) {
+          const key = player.id + ":r" + currentRound() + ":h" + hole;
+          const score = scoreFor(player, currentRound(), hole);
+          if (score != null) {
+            nextMap.set(key, score);
+            const before = lastScoreMap.get(key);
+            const diff = score - getParForHole(hole);
+            if (before == null && diff === -1) {
+              latestBirdieText = player.name + "選手が" + hole + "番でバーディ！";
+              latestCommentary = latestBirdieText;
+            }
+          }
+        }
+      });
+      lastScoreMap = nextMap;
+    }
+
+    function buildNews(rows, currentHole) {
+      const news = [];
+      const top = rows[0];
+      const top3 = rows.slice(0, 3);
+      const cut = cutLineInfo(rows);
+
+      news.push({
+        tag: "BIRDIE",
+        text: latestBirdieText || findRecentBirdieText(rows) || "バーディ速報を待機中です。"
+      });
+      news.push({
+        tag: "LEADER",
+        text: latestLeadChangeText || (top ? "現在の首位は" + top.player.name + "選手、" + parDiffLabel(top.total.toPar) + "です。" : "首位情報を集計中です。")
+      });
+
+      if (top3.length >= 3 && top3[2].total.toPar - top3[0].total.toPar <= 2) {
+        news.push({ tag: "TOP 3", text: "トップ3が" + (top3[2].total.toPar - top3[0].total.toPar) + "打差にひしめく接戦です。" });
+      } else {
+        news.push({ tag: "TOP 3", text: top3.length ? "トップグループの動きをホール" + currentHole + "で追跡中です。" : "トップ3情報を集計中です。" });
+      }
+
+      news.push({
+        tag: "CUT",
+        text: cut ? cut.label + " / 現在カットライン：" + cut.line.replace("CUT LINE ", "") : "予選カット情報は現在非表示です。"
+      });
+
+      return news;
+    }
+
+    function findRecentBirdieText(rows) {
+      for (const row of rows.slice(0, 8)) {
+        for (let hole = 18; hole >= 1; hole -= 1) {
+          const score = scoreFor(row.player, currentRound(), hole);
+          if (score != null && score - getParForHole(hole) === -1) {
+            return row.player.name + "選手が" + hole + "番でバーディ！";
+          }
+        }
+      }
+      return "";
+    }
+
+    function chooseCommentary(rows, news) {
+      if (latestCommentary && latestCommentary !== "大会状況を解析しています。") return latestCommentary;
+      const cut = cutLineInfo(rows);
+      if (rows.length >= 2 && rows[1].total.toPar === rows[0].total.toPar) {
+        return "首位タイの展開です。次のホールで大きく動く可能性があります。";
+      }
+      if (cut) return "現在のカットラインは" + cut.line.replace("CUT LINE ", "") + "です。";
+      return news[0]?.text || "ライブスコアを自動解析中です。";
+    }
+
+    function renderRanking(rows) {
+      const body = $("rankingBody");
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="4" class="empty">表示できる選手データがありません</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.slice(0, 5).map(row => `
+        <tr>
+          <td class="rankNo">${row.rank}</td>
+          <td class="playerName">${escapeHtml(row.player.name || "-")}</td>
+          <td class="scoreCell ${parDiffClass(row.total.toPar)}">${parDiffLabel(row.total.toPar)}</td>
+          <td class="thruCell">${thruLabel(row.player)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderNowPlaying(rows, currentHole) {
+      const leader = rows[0];
+      $("currentHoleLabel").textContent = currentHole;
+      $("parLabel").textContent = "PAR " + getParForHole(currentHole);
+      $("yardsLabel").textContent = "YDS " + getYardsForHole(currentHole);
+      $("leaderName").textContent = leader?.player?.name || "-";
+      $("leaderScore").textContent = leader ? parDiffLabel(leader.total.toPar) : "E";
+      $("leaderScore").className = "scoreCell " + (leader ? parDiffClass(leader.total.toPar) : "score-even");
+      $("nowMeta").textContent = "ROUND " + currentRound();
+
+      const cards = rows.slice(0, 5).map(row => {
+        const score = scoreFor(row.player, currentRound(), currentHole);
+        const diff = score == null ? null : score - getParForHole(currentHole);
+        const label = diff == null ? "-" : parDiffLabel(diff);
+        const cls = diff == null ? "score-even" : parDiffClass(diff);
+        return `
+          <div class="miniCard">
+            <div class="miniName">${escapeHtml(row.player.name || "-")}</div>
+            <div class="miniScore ${cls}">${label}</div>
+            <div class="miniSub">${score == null ? "未入力" : score + " strokes"}</div>
+          </div>
+        `;
+      }).join("");
+      $("holeScores").innerHTML = cards || '<div class="empty">ホール別スコアを待機中です</div>';
+    }
+
+    function renderNews(news) {
+      $("newsList").innerHTML = news.map(item => `
+        <div class="newsItem">
+          <div class="newsTag">${escapeHtml(item.tag)}</div>
+          <div class="newsText">${escapeHtml(item.text)}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderHeader() {
+      const name = state.tournamentName || state.deviceLock?.tournamentName || FIREBASE_TOURNAMENT_ID;
+      $("tournamentLabel").textContent = name + " / " + FIREBASE_TOURNAMENT_ID;
+      $("roundLabel").textContent = "Round " + currentRound() + " / " + roundCount();
+      $("clockLabel").textContent = new Date().toLocaleTimeString("ja-JP", { hour12: false });
+    }
+
+    function renderAll() {
+      try {
+        renderHeader();
+        const rows = rankingRows();
+        detectChanges(rows);
+        const currentHole = inferCurrentHole(rows);
+        const news = buildNews(rows, currentHole);
+        latestCommentary = chooseCommentary(rows, news);
+        renderRanking(rows);
+        renderNowPlaying(rows, currentHole);
+        renderNews(news);
+        $("commentaryText").textContent = latestCommentary;
+      } catch (error) {
+        console.error("[monitor_ai] render error", error);
+        $("syncLabel").innerHTML = '<span class="errorLine">RENDER ERROR</span>';
+        $("commentaryText").textContent = "データ解析中にエラーが発生しました。画面表示は継続します。";
+      }
+    }
+
+    function connectFirebase() {
+      try {
+        if (!window.firebase) {
+          $("syncLabel").innerHTML = '<span class="errorLine">SDK ERROR</span>';
+          return;
+        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        db.collection("tournaments").doc(FIREBASE_TOURNAMENT_ID).onSnapshot(snapshot => {
+          if (!snapshot.exists) {
+            $("syncLabel").textContent = "NO DATA";
+            snapshotReady = false;
+            renderAll();
+            return;
+          }
+          const data = snapshot.data() || {};
+          state = data.state || { groups: [], coursePar: {} };
+          snapshotReady = true;
+          $("syncLabel").textContent = "LIVE SYNC";
+          renderAll();
+        }, error => {
+          console.error("[monitor_ai] Firestore error", error);
+          $("syncLabel").innerHTML = '<span class="errorLine">SYNC ERROR</span>';
+          snapshotReady = false;
+          renderAll();
+        });
+      } catch (error) {
+        console.error("[monitor_ai] init error", error);
+        $("syncLabel").innerHTML = '<span class="errorLine">INIT ERROR</span>';
+        renderAll();
+      }
+    }
+
+    renderAll();
+    connectFirebase();
+    setInterval(renderAll, 15000);
+    setInterval(renderHeader, 1000);
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    }
+  </script>
+</body>
+</html>
