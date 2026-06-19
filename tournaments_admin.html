@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>大会マスター管理 v17.0 Phase 2-A</title>
+  <link rel="stylesheet" href="./platform-admin-v17.0.css">
+</head>
+<body class="platform-admin">
+  <div class="adminShell">
+    <aside class="adminSidebar">
+      <div class="adminBrand">
+        <strong>PGA Tournament Platform</strong>
+        <span>v17.0 Phase 2-A</span>
+      </div>
+      <nav class="adminNav">
+        <a href="./admin.html">管理トップ</a>
+        <a href="./players_admin.html">選手マスター</a>
+        <a class="active" href="./tournaments_admin.html">大会マスター</a>
+        <span class="disabledNav">出場者管理 <small>準備中</small></span>
+        <span class="disabledNav">スコア生成 <small>準備中</small></span>
+      </nav>
+    </aside>
+
+    <main class="adminMain">
+      <header class="adminTopbar">
+        <div class="adminTitle">
+          <h1>大会マスター管理</h1>
+          <p>Firestore tournaments_master/{tournamentId} を管理します。</p>
+        </div>
+        <div class="adminUser">
+          <span data-auth-email>認証確認中</span>
+          <span class="badge" data-auth-role>login</span>
+          <button class="btn secondary" data-platform-logout>ログアウト</button>
+        </div>
+      </header>
+
+      <section class="adminPanel">
+        <div class="panelHeader">
+          <h2>検索</h2>
+          <button id="resetSearchBtn" class="btn secondary">条件クリア</button>
+        </div>
+        <div class="formGrid three">
+          <div class="field">
+            <label for="searchName">大会名</label>
+            <input id="searchName" type="search" placeholder="例：すまいーだ">
+          </div>
+          <div class="field">
+            <label for="searchYear">年度</label>
+            <input id="searchYear" type="number" min="2000" max="2100" placeholder="例：2027">
+          </div>
+          <div class="field">
+            <label for="searchStatus">状態</label>
+            <select id="searchStatus"></select>
+          </div>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="toolbar">
+          <div>
+            <strong id="tournamentCountLabel">0件</strong>
+            <span class="smallText" id="tournamentUpdatedLabel">読込待ち</span>
+          </div>
+          <div class="buttonRow">
+            <button id="newTournamentBtn" class="btn">大会作成</button>
+            <button id="reloadTournamentsBtn" class="btn ghost">再読込</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="tableWrap">
+          <table class="adminTable">
+            <thead>
+              <tr>
+                <th>大会名</th>
+                <th>年度</th>
+                <th>会場</th>
+                <th>ラウンド数</th>
+                <th>カット設定</th>
+                <th>エントリー期間</th>
+                <th>状態</th>
+                <th>更新日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tournamentsTableBody">
+              <tr><td colspan="9" class="tableEmpty">ログイン後に読み込みます。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="tournamentModal" class="modalBackdrop" aria-hidden="true">
+    <div class="modalCard">
+      <form id="tournamentForm">
+        <div class="modalHeader">
+          <h2 id="tournamentModalTitle">大会作成</h2>
+          <p class="smallText">大会名、年度、会場、ラウンド数、カット設定、エントリー期間、状態を保存します。</p>
+        </div>
+        <div class="modalBody">
+          <div class="formGrid three">
+            <div class="field">
+              <label for="tournamentName">大会名</label>
+              <input id="tournamentName" name="name" required>
+            </div>
+            <div class="field">
+              <label for="tournamentYear">年度</label>
+              <input id="tournamentYear" name="year" type="number" min="2000" max="2100" required>
+            </div>
+            <div class="field">
+              <label for="tournamentVenue">会場</label>
+              <input id="tournamentVenue" name="venue">
+            </div>
+            <div class="field">
+              <label for="roundCount">ラウンド数</label>
+              <select id="roundCount" name="roundCount">
+                <option value="1">1R</option>
+                <option value="2">2R</option>
+                <option value="3">3R</option>
+                <option value="4">4R</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="cutEnabled">カット有無</label>
+              <select id="cutEnabled" name="cutEnabled">
+                <option value="false">OFF</option>
+                <option value="true">ON</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="cutAfterRound">カット実施ラウンド</label>
+              <select id="cutAfterRound" name="cutAfterRound"></select>
+            </div>
+            <div class="field">
+              <label for="cutPosition">カット順位</label>
+              <input id="cutPosition" name="cutPosition" type="number" min="1" max="999" value="60">
+            </div>
+            <div class="field">
+              <label for="cutIncludeTies">タイを含む</label>
+              <select id="cutIncludeTies" name="cutIncludeTies">
+                <option value="true">含む</option>
+                <option value="false">含まない</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="tournamentStatus">状態</label>
+              <select id="tournamentStatus" name="status"></select>
+            </div>
+            <div class="field">
+              <label for="entryStartDate">エントリー開始日</label>
+              <input id="entryStartDate" name="entryStartDate" type="date">
+            </div>
+            <div class="field">
+              <label for="entryEndDate">エントリー締切日</label>
+              <input id="entryEndDate" name="entryEndDate" type="date">
+            </div>
+          </div>
+          <div id="tournamentFormError" class="formError"></div>
+        </div>
+        <div class="modalFooter">
+          <button type="button" id="cancelTournamentBtn" class="btn secondary">キャンセル</button>
+          <button type="submit" class="btn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="./platform-core-v17.0.js"></script>
+  <script>
+    const TOURNAMENT_STATUSES = [
+      { value: 'draft', label: '下書き' },
+      { value: 'entry_open', label: 'エントリー受付中' },
+      { value: 'entry_closed', label: 'エントリー締切' },
+      { value: 'ready', label: '準備完了' },
+      { value: 'live', label: '開催中' },
+      { value: 'closed', label: '終了' }
+    ];
+
+    const appState = {
+      tournaments: [],
+      filtered: [],
+      editingId: null,
+      unsubscribe: null
+    };
+
+    const $ = id => document.getElementById(id);
+
+    function statusLabel(value) {
+      return TOURNAMENT_STATUSES.find(row => row.value === value)?.label || value || '未設定';
+    }
+
+    function statusBadgeClass(value) {
+      if (value === 'live') return 'badge pending';
+      if (value === 'closed') return 'badge disabled';
+      if (value === 'draft') return 'badge disabled';
+      return 'badge';
+    }
+
+    function fillSelect(select, rows, includeAllLabel) {
+      if (!select) return;
+      const options = includeAllLabel ? [{ value: '', label: includeAllLabel }, ...rows] : rows;
+      select.innerHTML = options.map(row => `<option value="${PGAPlatform.escapeHtml(row.value)}">${PGAPlatform.escapeHtml(row.label)}</option>`).join('');
+    }
+
+    function updateCutRoundOptions() {
+      const count = Number($('roundCount')?.value || 1);
+      const enabled = $('cutEnabled')?.value === 'true' && count > 1;
+      const cutAfter = $('cutAfterRound');
+      if (!cutAfter) return;
+      const current = Number(cutAfter.value || 1);
+      const values = Array.from({ length: Math.max(1, count - 1) }, (_, i) => i + 1);
+      cutAfter.innerHTML = values.map(v => `<option value="${v}">${v}R終了後</option>`).join('');
+      cutAfter.value = String(values.includes(current) ? current : values[0]);
+      cutAfter.disabled = !enabled;
+      $('cutPosition').disabled = !enabled;
+      $('cutIncludeTies').disabled = !enabled;
+    }
+
+    function collectFilters() {
+      return {
+        name: PGAPlatform.normalizeText($('searchName')?.value),
+        year: String($('searchYear')?.value || '').trim(),
+        status: $('searchStatus')?.value || ''
+      };
+    }
+
+    function applyFilters() {
+      const f = collectFilters();
+      appState.filtered = appState.tournaments.filter(tournament => {
+        if (f.name && !PGAPlatform.normalizeText(tournament.name).includes(f.name)) return false;
+        if (f.year && String(tournament.year || '') !== f.year) return false;
+        if (f.status && tournament.status !== f.status) return false;
+        return true;
+      });
+      renderTournaments();
+    }
+
+    function cutSummary(tournament) {
+      if (!tournament.cutEnabled) return 'OFF';
+      const afterRound = Number(tournament.cutAfterRound || 1);
+      const position = Number(tournament.cutPosition || 60);
+      const ties = tournament.cutIncludeTies !== false ? 'タイ含む' : 'タイ除外';
+      return `${afterRound}R後 / ${position}位 / ${ties}`;
+    }
+
+    function entryPeriod(tournament) {
+      const start = tournament.entryStartDate || '-';
+      const end = tournament.entryEndDate || '-';
+      return `${start} ～ ${end}`;
+    }
+
+    function renderTournaments() {
+      const body = $('tournamentsTableBody');
+      if (!body) return;
+      $('tournamentCountLabel').textContent = `${appState.filtered.length}件 / 全${appState.tournaments.length}件`;
+      $('tournamentUpdatedLabel').textContent = `更新 ${new Date().toLocaleTimeString('ja-JP', { hour12: false })}`;
+
+      if (!appState.filtered.length) {
+        body.innerHTML = '<tr><td colspan="9" class="tableEmpty">該当する大会がありません。</td></tr>';
+        return;
+      }
+
+      body.innerHTML = appState.filtered.map(tournament => `
+        <tr>
+          <td><strong>${PGAPlatform.escapeHtml(tournament.name || '')}</strong></td>
+          <td>${PGAPlatform.escapeHtml(tournament.year || '')}</td>
+          <td>${PGAPlatform.escapeHtml(tournament.venue || '')}</td>
+          <td>${Number(tournament.roundCount || 1)}R</td>
+          <td>${PGAPlatform.escapeHtml(cutSummary(tournament))}</td>
+          <td>${PGAPlatform.escapeHtml(entryPeriod(tournament))}</td>
+          <td>
+            <select data-status-select="${tournament.id}" aria-label="状態変更">
+              ${TOURNAMENT_STATUSES.map(row => `<option value="${row.value}" ${row.value === tournament.status ? 'selected' : ''}>${row.label}</option>`).join('')}
+            </select>
+          </td>
+          <td>${PGAPlatform.escapeHtml(PGAPlatform.formatDateTime(tournament.updatedAt))}</td>
+          <td>
+            <div class="buttonRow">
+              <button class="btn secondary" data-edit-tournament="${tournament.id}">編集</button>
+              <button class="btn ghost" data-copy-tournament="${tournament.id}">複製</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+      document.querySelectorAll('[data-edit-tournament]').forEach(btn => {
+        btn.onclick = () => openTournamentModal(btn.dataset.editTournament);
+      });
+      document.querySelectorAll('[data-copy-tournament]').forEach(btn => {
+        btn.onclick = () => duplicateTournament(btn.dataset.copyTournament);
+      });
+      document.querySelectorAll('[data-status-select]').forEach(select => {
+        select.onchange = () => updateTournamentStatus(select.dataset.statusSelect, select.value);
+      });
+    }
+
+    function defaultYear() {
+      return new Date().getFullYear();
+    }
+
+    function openTournamentModal(tournamentId) {
+      appState.editingId = tournamentId || null;
+      const tournament = appState.tournaments.find(t => t.id === tournamentId) || {};
+      $('tournamentModalTitle').textContent = tournamentId ? '大会編集' : '大会作成';
+      $('tournamentName').value = tournament.name || '';
+      $('tournamentYear').value = tournament.year || defaultYear();
+      $('tournamentVenue').value = tournament.venue || '';
+      $('roundCount').value = String(tournament.roundCount || 2);
+      $('cutEnabled').value = String(Boolean(tournament.cutEnabled));
+      updateCutRoundOptions();
+      $('cutAfterRound').value = String(tournament.cutAfterRound || 1);
+      $('cutPosition').value = tournament.cutPosition || 60;
+      $('cutIncludeTies').value = String(tournament.cutIncludeTies !== false);
+      $('entryStartDate').value = tournament.entryStartDate || '';
+      $('entryEndDate').value = tournament.entryEndDate || '';
+      $('tournamentStatus').value = tournament.status || 'draft';
+      updateCutRoundOptions();
+      $('tournamentFormError').classList.remove('show');
+      $('tournamentModal').classList.add('show');
+      $('tournamentModal').setAttribute('aria-hidden', 'false');
+      setTimeout(() => $('tournamentName')?.focus(), 0);
+    }
+
+    function closeTournamentModal() {
+      $('tournamentModal').classList.remove('show');
+      $('tournamentModal').setAttribute('aria-hidden', 'true');
+      appState.editingId = null;
+    }
+
+    function formDataToTournament() {
+      const roundCount = Number($('roundCount').value || 1);
+      const cutEnabled = $('cutEnabled').value === 'true' && roundCount > 1;
+      return {
+        name: $('tournamentName').value.trim(),
+        year: Number($('tournamentYear').value || defaultYear()),
+        venue: $('tournamentVenue').value.trim(),
+        roundCount,
+        cutEnabled,
+        cutAfterRound: cutEnabled ? Number($('cutAfterRound').value || 1) : 1,
+        cutPosition: cutEnabled ? Number($('cutPosition').value || 60) : 60,
+        cutIncludeTies: $('cutIncludeTies').value !== 'false',
+        entryStartDate: $('entryStartDate').value,
+        entryEndDate: $('entryEndDate').value,
+        status: $('tournamentStatus').value || 'draft'
+      };
+    }
+
+    async function saveTournament(event) {
+      event.preventDefault();
+      const data = formDataToTournament();
+      const errorBox = $('tournamentFormError');
+      errorBox.classList.remove('show');
+      if (!data.name) {
+        errorBox.textContent = '大会名を入力してください。';
+        errorBox.classList.add('show');
+        return;
+      }
+      if (!data.year || data.year < 2000 || data.year > 2100) {
+        errorBox.textContent = '年度を正しく入力してください。';
+        errorBox.classList.add('show');
+        return;
+      }
+
+      try {
+        const collection = PGAPlatform.db().collection('tournaments_master');
+        if (appState.editingId) {
+          await collection.doc(appState.editingId).set({
+            ...data,
+            updatedAt: PGAPlatform.serverTimestamp()
+          }, { merge: true });
+          PGAPlatform.showToast('大会情報を更新しました。');
+        } else {
+          await collection.add({
+            ...data,
+            sourceTournamentId: null,
+            createdAt: PGAPlatform.serverTimestamp(),
+            updatedAt: PGAPlatform.serverTimestamp()
+          });
+          PGAPlatform.showToast('大会を作成しました。');
+        }
+        closeTournamentModal();
+      } catch (error) {
+        errorBox.textContent = '保存できませんでした: ' + (error.message || error.code);
+        errorBox.classList.add('show');
+      }
+    }
+
+    function duplicateName(source) {
+      const currentYear = Number(source.year || defaultYear());
+      const nextYear = currentYear + 1;
+      const name = String(source.name || '');
+      if (name.includes(String(currentYear))) return name.replace(String(currentYear), String(nextYear));
+      return `${nextYear}${name}`;
+    }
+
+    async function duplicateTournament(tournamentId) {
+      const source = appState.tournaments.find(t => t.id === tournamentId);
+      if (!source) return;
+      const nextYear = Number(source.year || defaultYear()) + 1;
+      const ok = confirm(`${source.name || '大会'} を複製して ${nextYear} 年度の大会を作成します。よろしいですか？`);
+      if (!ok) return;
+
+      try {
+        const copy = {
+          name: duplicateName(source),
+          year: nextYear,
+          venue: source.venue || '',
+          roundCount: Number(source.roundCount || 1),
+          cutEnabled: Boolean(source.cutEnabled),
+          cutAfterRound: Number(source.cutAfterRound || 1),
+          cutPosition: Number(source.cutPosition || 60),
+          cutIncludeTies: source.cutIncludeTies !== false,
+          entryStartDate: source.entryStartDate || '',
+          entryEndDate: source.entryEndDate || '',
+          status: 'draft',
+          sourceTournamentId: source.id,
+          createdAt: PGAPlatform.serverTimestamp(),
+          updatedAt: PGAPlatform.serverTimestamp()
+        };
+        await PGAPlatform.db().collection('tournaments_master').add(copy);
+        PGAPlatform.showToast('大会を複製しました。');
+      } catch (error) {
+        PGAPlatform.showToast('複製できませんでした: ' + (error.message || error.code));
+      }
+    }
+
+    async function updateTournamentStatus(tournamentId, status) {
+      try {
+        await PGAPlatform.db().collection('tournaments_master').doc(tournamentId).set({
+          status,
+          updatedAt: PGAPlatform.serverTimestamp()
+        }, { merge: true });
+        PGAPlatform.showToast(`状態を ${statusLabel(status)} に変更しました。`);
+      } catch (error) {
+        PGAPlatform.showToast('状態変更に失敗しました: ' + (error.message || error.code));
+      }
+    }
+
+    function subscribeTournaments() {
+      if (appState.unsubscribe) appState.unsubscribe();
+      appState.unsubscribe = PGAPlatform.db().collection('tournaments_master').onSnapshot(snapshot => {
+        appState.tournaments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => {
+            const yearDiff = Number(b.year || 0) - Number(a.year || 0);
+            if (yearDiff !== 0) return yearDiff;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+          });
+        applyFilters();
+      }, error => {
+        console.error('[v17 tournaments] snapshot error', error);
+        $('tournamentsTableBody').innerHTML = `<tr><td colspan="9" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
+      });
+    }
+
+    function bindEvents() {
+      ['searchName', 'searchYear', 'searchStatus'].forEach(id => {
+        $(id)?.addEventListener('input', applyFilters);
+        $(id)?.addEventListener('change', applyFilters);
+      });
+      $('resetSearchBtn').onclick = () => {
+        $('searchName').value = '';
+        $('searchYear').value = '';
+        $('searchStatus').value = '';
+        applyFilters();
+      };
+      $('newTournamentBtn').onclick = () => openTournamentModal(null);
+      $('cancelTournamentBtn').onclick = closeTournamentModal;
+      $('tournamentModal').addEventListener('click', event => {
+        if (event.target === $('tournamentModal')) closeTournamentModal();
+      });
+      $('tournamentForm').addEventListener('submit', saveTournament);
+      $('roundCount').addEventListener('change', updateCutRoundOptions);
+      $('cutEnabled').addEventListener('change', updateCutRoundOptions);
+      $('reloadTournamentsBtn').onclick = () => {
+        subscribeTournaments();
+        PGAPlatform.showToast('大会一覧を再読込しました。');
+      };
+    }
+
+    function initTournamentsPage() {
+      fillSelect($('searchStatus'), TOURNAMENT_STATUSES, 'すべて');
+      fillSelect($('tournamentStatus'), TOURNAMENT_STATUSES, null);
+      updateCutRoundOptions();
+      bindEvents();
+      subscribeTournaments();
+      PGAPlatform.bindLogoutButtons();
+    }
+
+    PGAPlatform.requireAuth({
+      pageName: '大会マスター管理',
+      onReady: initTournamentsPage
+    });
+  </script>
+</body>
+</html>
