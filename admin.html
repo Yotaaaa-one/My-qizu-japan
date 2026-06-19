@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PGA Tournament Platform v17.0</title>
+  <link rel="stylesheet" href="./platform-admin-v17.0.css">
+</head>
+<body class="platform-admin">
+  <div class="adminShell">
+    <aside class="adminSidebar">
+      <div class="adminBrand">
+        <strong>PGA Tournament Platform</strong>
+        <span>v17.0 Phase 1</span>
+      </div>
+      <nav class="adminNav">
+        <a class="active" href="./admin.html">管理トップ</a>
+        <a href="./players_admin.html">選手マスター</a>
+        <span class="disabledNav">大会マスター <small>準備中</small></span>
+        <span class="disabledNav">出場者管理 <small>準備中</small></span>
+        <span class="disabledNav">スコア生成 <small>準備中</small></span>
+      </nav>
+    </aside>
+
+    <main class="adminMain">
+      <header class="adminTopbar">
+        <div class="adminTitle">
+          <h1>統合管理トップ</h1>
+          <p>既存スコアシステムの外側に、大会運営管理を追加します。</p>
+        </div>
+        <div class="adminUser">
+          <span data-auth-email>認証確認中</span>
+          <span class="badge" data-auth-role>login</span>
+          <button class="btn secondary" data-platform-logout>ログアウト</button>
+        </div>
+      </header>
+
+      <section class="cardGrid">
+        <article class="adminCard">
+          <div>
+            <h2>選手マスター</h2>
+            <p>選手情報の登録、編集、検索、CSVインポート、CSVエクスポートを行います。</p>
+          </div>
+          <div class="adminCardFooter">
+            <a class="btn" href="./players_admin.html">開く</a>
+            <span class="badge">Phase 1</span>
+          </div>
+        </article>
+
+        <article class="adminCard">
+          <div>
+            <h2>大会マスター</h2>
+            <p>大会名、年度、会場、ラウンド数、カット設定、エントリー期間を管理します。</p>
+          </div>
+          <div class="adminCardFooter">
+            <button class="btn secondary" disabled>準備中</button>
+            <span class="badge pending">Phase 2</span>
+          </div>
+        </article>
+
+        <article class="adminCard">
+          <div>
+            <h2>出場者管理</h2>
+            <p>出場対象選手、承認、欠場、補欠、組番号、スタート時間を管理します。</p>
+          </div>
+          <div class="adminCardFooter">
+            <button class="btn secondary" disabled>準備中</button>
+            <span class="badge pending">Phase 3</span>
+          </div>
+        </article>
+
+        <article class="adminCard">
+          <div>
+            <h2>スコアシステム生成</h2>
+            <p>大会マスターと出場者情報から既存互換の tournaments/{大会ID} を生成します。</p>
+          </div>
+          <div class="adminCardFooter">
+            <button class="btn secondary" disabled>準備中</button>
+            <span class="badge pending">Phase 4</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="adminPanel" style="margin-top:16px;">
+        <div class="panelHeader">
+          <h2>既存スコアシステム</h2>
+          <span class="smallText">v16.6.2 互換画面へのリンク</span>
+        </div>
+        <div class="buttonRow">
+          <a class="btn secondary" href="./hq.html">本部画面 hq.html</a>
+          <a class="btn secondary" href="./scorer.html">スコアラー scorer.html</a>
+          <a class="btn secondary" href="./monitor.html">本部モニター monitor.html</a>
+          <a class="btn secondary" href="./public.html">一般モニター public.html</a>
+          <a class="btn secondary" href="./monitor_ai.html">AI実況 monitor_ai.html</a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="./platform-core-v17.0.js"></script>
+  <script>
+    PGAPlatform.requireAuth({
+      pageName: 'PGA Tournament Platform',
+      onReady: function() {
+        PGAPlatform.bindLogoutButtons();
+      }
+    });
+  </script>
+</body>
+</html>

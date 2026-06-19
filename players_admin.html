@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>選手マスター管理 v17.0</title>
+  <link rel="stylesheet" href="./platform-admin-v17.0.css">
+</head>
+<body class="platform-admin">
+  <div class="adminShell">
+    <aside class="adminSidebar">
+      <div class="adminBrand">
+        <strong>PGA Tournament Platform</strong>
+        <span>v17.0 Phase 1</span>
+      </div>
+      <nav class="adminNav">
+        <a href="./admin.html">管理トップ</a>
+        <a class="active" href="./players_admin.html">選手マスター</a>
+        <span class="disabledNav">大会マスター <small>準備中</small></span>
+        <span class="disabledNav">出場者管理 <small>準備中</small></span>
+        <span class="disabledNav">スコア生成 <small>準備中</small></span>
+      </nav>
+    </aside>
+
+    <main class="adminMain">
+      <header class="adminTopbar">
+        <div class="adminTitle">
+          <h1>選手マスター管理</h1>
+          <p>Firestore players/{playerId} を管理します。</p>
+        </div>
+        <div class="adminUser">
+          <span data-auth-email>認証確認中</span>
+          <span class="badge" data-auth-role>login</span>
+          <button class="btn secondary" data-platform-logout>ログアウト</button>
+        </div>
+      </header>
+
+      <section class="adminPanel">
+        <div class="panelHeader">
+          <h2>検索</h2>
+          <button id="resetSearchBtn" class="btn secondary">条件クリア</button>
+        </div>
+        <div class="formGrid">
+          <div class="field">
+            <label for="searchName">氏名</label>
+            <input id="searchName" type="search" placeholder="例：山田">
+          </div>
+          <div class="field">
+            <label for="searchKana">フリガナ</label>
+            <input id="searchKana" type="search" placeholder="例：ヤマダ">
+          </div>
+          <div class="field">
+            <label for="searchAffiliation">所属</label>
+            <input id="searchAffiliation" type="search" placeholder="例：PGA">
+          </div>
+          <div class="field">
+            <label for="searchQualification">資格区分</label>
+            <select id="searchQualification"></select>
+          </div>
+          <div class="field">
+            <label for="searchStatus">ステータス</label>
+            <select id="searchStatus"></select>
+          </div>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="toolbar">
+          <div>
+            <strong id="playerCountLabel">0件</strong>
+            <span class="smallText" id="playerUpdatedLabel">読込待ち</span>
+          </div>
+          <div class="buttonRow">
+            <button id="newPlayerBtn" class="btn">新規登録</button>
+            <button id="importCsvBtn" class="btn secondary">CSVインポート</button>
+            <button id="exportCsvBtn" class="btn secondary">CSVエクスポート</button>
+            <button id="reloadPlayersBtn" class="btn ghost">再読込</button>
+            <input id="csvFileInput" class="hidden" type="file" accept=".csv,text/csv">
+          </div>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="tableWrap">
+          <table class="adminTable">
+            <thead>
+              <tr>
+                <th>氏名</th>
+                <th>フリガナ</th>
+                <th>所属</th>
+                <th>資格区分</th>
+                <th>生年月日</th>
+                <th>メール</th>
+                <th>電話</th>
+                <th>ステータス</th>
+                <th>更新日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="playersTableBody">
+              <tr><td colspan="10" class="tableEmpty">ログイン後に読み込みます。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="playerModal" class="modalBackdrop" aria-hidden="true">
+    <div class="modalCard">
+      <form id="playerForm">
+        <div class="modalHeader">
+          <h2 id="playerModalTitle">選手登録</h2>
+          <p class="smallText">氏名は必須です。CSVの列名は英語・日本語のどちらにも対応します。</p>
+        </div>
+        <div class="modalBody">
+          <div class="formGrid three">
+            <div class="field">
+              <label for="playerName">氏名</label>
+              <input id="playerName" name="name" required>
+            </div>
+            <div class="field">
+              <label for="playerKana">フリガナ</label>
+              <input id="playerKana" name="kana">
+            </div>
+            <div class="field">
+              <label for="playerAffiliation">所属</label>
+              <input id="playerAffiliation" name="affiliation">
+            </div>
+            <div class="field">
+              <label for="playerQualification">資格区分</label>
+              <select id="playerQualification" name="qualification"></select>
+            </div>
+            <div class="field">
+              <label for="playerBirthDate">生年月日</label>
+              <input id="playerBirthDate" name="birthDate" type="date">
+            </div>
+            <div class="field">
+              <label for="playerStatus">ステータス</label>
+              <select id="playerStatus" name="status"></select>
+            </div>
+            <div class="field">
+              <label for="playerEmail">メールアドレス</label>
+              <input id="playerEmail" name="email" type="email">
+            </div>
+            <div class="field">
+              <label for="playerPhone">電話番号</label>
+              <input id="playerPhone" name="phone" type="tel">
+            </div>
+          </div>
+          <div id="playerFormError" class="formError"></div>
+        </div>
+        <div class="modalFooter">
+          <button type="button" id="cancelPlayerBtn" class="btn secondary">キャンセル</button>
+          <button type="submit" class="btn">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="./platform-core-v17.0.js"></script>
+  <script>
+    const appState = {
+      players: [],
+      filtered: [],
+      editingId: null,
+      unsubscribe: null
+    };
+
+    const $ = id => document.getElementById(id);
+
+    function fillSelect(select, rows, includeAllLabel) {
+      if (!select) return;
+      const options = includeAllLabel ? [{ value: '', label: includeAllLabel }, ...rows] : rows;
+      select.innerHTML = options.map(row => `<option value="${PGAPlatform.escapeHtml(row.value)}">${PGAPlatform.escapeHtml(row.label)}</option>`).join('');
+    }
+
+    function collectFilters() {
+      return {
+        name: PGAPlatform.normalizeText($('searchName')?.value),
+        kana: PGAPlatform.normalizeText($('searchKana')?.value),
+        affiliation: PGAPlatform.normalizeText($('searchAffiliation')?.value),
+        qualification: $('searchQualification')?.value || '',
+        status: $('searchStatus')?.value || ''
+      };
+    }
+
+    function applyFilters() {
+      const f = collectFilters();
+      appState.filtered = appState.players.filter(player => {
+        if (f.name && !PGAPlatform.normalizeText(player.name).includes(f.name)) return false;
+        if (f.kana && !PGAPlatform.normalizeText(player.kana).includes(f.kana)) return false;
+        if (f.affiliation && !PGAPlatform.normalizeText(player.affiliation).includes(f.affiliation)) return false;
+        if (f.qualification && player.qualification !== f.qualification) return false;
+        if (f.status && player.status !== f.status) return false;
+        return true;
+      });
+      renderPlayers();
+    }
+
+    function renderPlayers() {
+      const body = $('playersTableBody');
+      if (!body) return;
+      $('playerCountLabel').textContent = `${appState.filtered.length}件 / 全${appState.players.length}件`;
+      $('playerUpdatedLabel').textContent = `更新 ${new Date().toLocaleTimeString('ja-JP', { hour12: false })}`;
+
+      if (!appState.filtered.length) {
+        body.innerHTML = '<tr><td colspan="10" class="tableEmpty">該当する選手がいません。</td></tr>';
+        return;
+      }
+
+      body.innerHTML = appState.filtered.map(player => `
+        <tr>
+          <td><strong>${PGAPlatform.escapeHtml(player.name || '')}</strong></td>
+          <td>${PGAPlatform.escapeHtml(player.kana || '')}</td>
+          <td>${PGAPlatform.escapeHtml(player.affiliation || '')}</td>
+          <td>${PGAPlatform.escapeHtml(PGAPlatform.qualificationLabel(player.qualification))}</td>
+          <td>${PGAPlatform.escapeHtml(player.birthDate || '')}</td>
+          <td>${PGAPlatform.escapeHtml(player.email || '')}</td>
+          <td>${PGAPlatform.escapeHtml(player.phone || '')}</td>
+          <td><span class="${PGAPlatform.badgeClassForStatus(player.status)}">${PGAPlatform.escapeHtml(PGAPlatform.statusLabel(player.status))}</span></td>
+          <td>${PGAPlatform.escapeHtml(PGAPlatform.formatDateTime(player.updatedAt))}</td>
+          <td><button class="btn secondary" data-edit-player="${player.id}">編集</button></td>
+        </tr>
+      `).join('');
+
+      document.querySelectorAll('[data-edit-player]').forEach(btn => {
+        btn.onclick = () => openPlayerModal(btn.dataset.editPlayer);
+      });
+    }
+
+    function openPlayerModal(playerId) {
+      appState.editingId = playerId || null;
+      const player = appState.players.find(p => p.id === playerId) || {};
+      $('playerModalTitle').textContent = playerId ? '選手編集' : '選手登録';
+      $('playerName').value = player.name || '';
+      $('playerKana').value = player.kana || '';
+      $('playerAffiliation').value = player.affiliation || '';
+      $('playerQualification').value = player.qualification || '';
+      $('playerBirthDate').value = player.birthDate || '';
+      $('playerEmail').value = player.email || '';
+      $('playerPhone').value = player.phone || '';
+      $('playerStatus').value = player.status || 'active';
+      $('playerFormError').classList.remove('show');
+      $('playerModal').classList.add('show');
+      $('playerModal').setAttribute('aria-hidden', 'false');
+      setTimeout(() => $('playerName')?.focus(), 0);
+    }
+
+    function closePlayerModal() {
+      $('playerModal').classList.remove('show');
+      $('playerModal').setAttribute('aria-hidden', 'true');
+      appState.editingId = null;
+    }
+
+    function formDataToPlayer() {
+      return {
+        name: $('playerName').value.trim(),
+        kana: $('playerKana').value.trim(),
+        affiliation: $('playerAffiliation').value.trim(),
+        qualification: $('playerQualification').value,
+        birthDate: $('playerBirthDate').value,
+        email: $('playerEmail').value.trim(),
+        phone: $('playerPhone').value.trim(),
+        status: $('playerStatus').value || 'active'
+      };
+    }
+
+    async function savePlayer(event) {
+      event.preventDefault();
+      const data = formDataToPlayer();
+      const errorBox = $('playerFormError');
+      errorBox.classList.remove('show');
+      if (!data.name) {
+        errorBox.textContent = '氏名を入力してください。';
+        errorBox.classList.add('show');
+        return;
+      }
+
+      try {
+        const collection = PGAPlatform.db().collection('players');
+        if (appState.editingId) {
+          await collection.doc(appState.editingId).set({
+            ...data,
+            updatedAt: PGAPlatform.serverTimestamp()
+          }, { merge: true });
+          PGAPlatform.showToast('選手情報を更新しました。');
+        } else {
+          await collection.add({
+            ...data,
+            createdAt: PGAPlatform.serverTimestamp(),
+            updatedAt: PGAPlatform.serverTimestamp()
+          });
+          PGAPlatform.showToast('選手を登録しました。');
+        }
+        closePlayerModal();
+      } catch (error) {
+        errorBox.textContent = '保存できませんでした: ' + (error.message || error.code);
+        errorBox.classList.add('show');
+      }
+    }
+
+    function subscribePlayers() {
+      if (appState.unsubscribe) appState.unsubscribe();
+      appState.unsubscribe = PGAPlatform.db().collection('players').onSnapshot(snapshot => {
+        appState.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => {
+            const kana = String(a.kana || '').localeCompare(String(b.kana || ''), 'ja');
+            if (kana !== 0) return kana;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+          });
+        applyFilters();
+      }, error => {
+        console.error('[v17 players] snapshot error', error);
+        $('playersTableBody').innerHTML = `<tr><td colspan="10" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
+      });
+    }
+
+    function exportCsv() {
+      const rows = appState.filtered.map(player => ({
+        playerId: player.id,
+        name: player.name || '',
+        kana: player.kana || '',
+        affiliation: player.affiliation || '',
+        qualification: player.qualification || '',
+        birthDate: player.birthDate || '',
+        email: player.email || '',
+        phone: player.phone || '',
+        status: player.status || '',
+        createdAt: PGAPlatform.formatDateTime(player.createdAt),
+        updatedAt: PGAPlatform.formatDateTime(player.updatedAt)
+      }));
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      PGAPlatform.downloadText(`players_master_${stamp}.csv`, PGAPlatform.objectsToCsv(rows), 'text/csv;charset=utf-8');
+      PGAPlatform.showToast('CSVを書き出しました。');
+    }
+
+    function safeDocId(raw) {
+      return String(raw || '').trim().replace(/[\/#?[\]]/g, '_').slice(0, 120);
+    }
+
+    async function importCsv(file) {
+      if (!file) return;
+      try {
+        const text = await PGAPlatform.readFileAsText(file);
+        const records = PGAPlatform.csvToObjects(text).map(PGAPlatform.normalizePlayerRecord).filter(row => row.name);
+        if (!records.length) {
+          PGAPlatform.showToast('取り込める選手データがありません。');
+          return;
+        }
+
+        const collection = PGAPlatform.db().collection('players');
+        let batch = PGAPlatform.db().batch();
+        let pending = 0;
+        let imported = 0;
+
+        const commit = async () => {
+          if (!pending) return;
+          await batch.commit();
+          batch = PGAPlatform.db().batch();
+          pending = 0;
+        };
+
+        for (const row of records) {
+          const id = safeDocId(row.playerId);
+          const ref = id ? collection.doc(id) : collection.doc();
+          const exists = id ? await ref.get().then(snap => snap.exists).catch(() => false) : false;
+          const data = {
+            name: row.name,
+            kana: row.kana,
+            affiliation: row.affiliation,
+            qualification: row.qualification,
+            birthDate: row.birthDate,
+            email: row.email,
+            phone: row.phone,
+            status: row.status || 'active',
+            updatedAt: PGAPlatform.serverTimestamp()
+          };
+          if (!exists) data.createdAt = PGAPlatform.serverTimestamp();
+          batch.set(ref, data, { merge: true });
+          pending += 1;
+          imported += 1;
+          if (pending >= 450) await commit();
+        }
+        await commit();
+        PGAPlatform.showToast(`${imported}件をCSVインポートしました。`);
+      } catch (error) {
+        PGAPlatform.showToast('CSVインポートに失敗しました: ' + (error.message || error.code));
+      } finally {
+        $('csvFileInput').value = '';
+      }
+    }
+
+    function bindEvents() {
+      ['searchName', 'searchKana', 'searchAffiliation', 'searchQualification', 'searchStatus'].forEach(id => {
+        $(id)?.addEventListener('input', applyFilters);
+        $(id)?.addEventListener('change', applyFilters);
+      });
+      $('resetSearchBtn').onclick = () => {
+        ['searchName', 'searchKana', 'searchAffiliation'].forEach(id => { $(id).value = ''; });
+        $('searchQualification').value = '';
+        $('searchStatus').value = '';
+        applyFilters();
+      };
+      $('newPlayerBtn').onclick = () => openPlayerModal(null);
+      $('cancelPlayerBtn').onclick = closePlayerModal;
+      $('playerModal').addEventListener('click', event => {
+        if (event.target === $('playerModal')) closePlayerModal();
+      });
+      $('playerForm').addEventListener('submit', savePlayer);
+      $('exportCsvBtn').onclick = exportCsv;
+      $('importCsvBtn').onclick = () => $('csvFileInput').click();
+      $('csvFileInput').onchange = event => importCsv(event.target.files?.[0]);
+      $('reloadPlayersBtn').onclick = () => {
+        subscribePlayers();
+        PGAPlatform.showToast('選手一覧を再読込しました。');
+      };
+    }
+
+    function initPlayersPage() {
+      fillSelect($('searchQualification'), PGAPlatform.QUALIFICATIONS.filter(row => row.value), 'すべて');
+      fillSelect($('searchStatus'), PGAPlatform.STATUSES, 'すべて');
+      fillSelect($('playerQualification'), PGAPlatform.QUALIFICATIONS, null);
+      fillSelect($('playerStatus'), PGAPlatform.STATUSES, null);
+      bindEvents();
+      subscribePlayers();
+      PGAPlatform.bindLogoutButtons();
+    }
+
+    PGAPlatform.requireAuth({
+      pageName: '選手マスター管理',
+      onReady: initPlayersPage
+    });
+  </script>
+</body>
+</html>
