@@ -17,7 +17,7 @@
         <a href="./admin.html">管理トップ</a>
         <a href="./players_admin.html">選手マスター</a>
         <a class="active" href="./tournaments_admin.html">大会マスター</a>
-        <span class="disabledNav">出場者管理 <small>準備中</small></span>
+        <a href="./entries_admin.html">出場者管理</a>
         <span class="disabledNav">スコア生成 <small>準備中</small></span>
       </nav>
     </aside>
@@ -77,6 +77,7 @@
                 <th>大会名</th>
                 <th>年度</th>
                 <th>会場</th>
+                <th>大会日程</th>
                 <th>ラウンド数</th>
                 <th>カット設定</th>
                 <th>エントリー期間</th>
@@ -86,7 +87,7 @@
               </tr>
             </thead>
             <tbody id="tournamentsTableBody">
-              <tr><td colspan="9" class="tableEmpty">ログイン後に読み込みます。</td></tr>
+              <tr><td colspan="10" class="tableEmpty">ログイン後に読み込みます。</td></tr>
             </tbody>
           </table>
         </div>
@@ -125,6 +126,14 @@
               </select>
             </div>
             <div class="field">
+              <label for="startDate">大会開始日</label>
+              <input id="startDate" name="startDate" type="date">
+            </div>
+            <div class="field">
+              <label for="endDate">大会終了日</label>
+              <input id="endDate" name="endDate" type="date">
+            </div>
+            <div class="field">
               <label for="cutEnabled">カット有無</label>
               <select id="cutEnabled" name="cutEnabled">
                 <option value="false">OFF</option>
@@ -158,6 +167,13 @@
               <label for="entryEndDate">エントリー締切日</label>
               <input id="entryEndDate" name="entryEndDate" type="date">
             </div>
+          </div>
+          <div style="margin-top:14px;">
+            <div class="panelHeader" style="margin-bottom:10px;">
+              <h2>ラウンド別日程</h2>
+              <span class="smallText">ラウンド数に応じて入力欄を表示します。</span>
+            </div>
+            <div id="roundDateFields" class="formGrid"></div>
           </div>
           <div id="tournamentFormError" class="formError"></div>
         </div>
@@ -256,6 +272,22 @@
       return `${start} ～ ${end}`;
     }
 
+    function dateLabel(value) {
+      if (!value) return '-';
+      const date = new Date(value + 'T00:00:00');
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    function scheduleLabel(tournament) {
+      const roundDates = tournament.roundDates || {};
+      const dates = Object.values(roundDates).filter(Boolean).sort();
+      const start = tournament.startDate || dates[0] || '';
+      const end = tournament.endDate || dates[dates.length - 1] || '';
+      if (!start && !end) return '-';
+      return `${dateLabel(start)} ～ ${dateLabel(end || start)}`;
+    }
+
     function renderTournaments() {
       const body = $('tournamentsTableBody');
       if (!body) return;
@@ -263,7 +295,7 @@
       $('tournamentUpdatedLabel').textContent = `更新 ${new Date().toLocaleTimeString('ja-JP', { hour12: false })}`;
 
       if (!appState.filtered.length) {
-        body.innerHTML = '<tr><td colspan="9" class="tableEmpty">該当する大会がありません。</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="tableEmpty">該当する大会がありません。</td></tr>';
         return;
       }
 
@@ -272,6 +304,7 @@
           <td><strong>${PGAPlatform.escapeHtml(tournament.name || '')}</strong></td>
           <td>${PGAPlatform.escapeHtml(tournament.year || '')}</td>
           <td>${PGAPlatform.escapeHtml(tournament.venue || '')}</td>
+          <td>${PGAPlatform.escapeHtml(scheduleLabel(tournament))}</td>
           <td>${Number(tournament.roundCount || 1)}R</td>
           <td>${PGAPlatform.escapeHtml(cutSummary(tournament))}</td>
           <td>${PGAPlatform.escapeHtml(entryPeriod(tournament))}</td>
@@ -305,6 +338,48 @@
       return new Date().getFullYear();
     }
 
+    function collectRoundDatesFromDom() {
+      const dates = {};
+      document.querySelectorAll('[data-round-date]').forEach(input => {
+        if (input.value) dates[input.dataset.roundDate] = input.value;
+      });
+      return dates;
+    }
+
+    function dateBounds(roundDates) {
+      const dates = Object.values(roundDates || {}).filter(Boolean).sort();
+      return {
+        startDate: dates[0] || '',
+        endDate: dates[dates.length - 1] || ''
+      };
+    }
+
+    function syncScheduleBounds() {
+      const bounds = dateBounds(collectRoundDatesFromDom());
+      if (bounds.startDate) $('startDate').value = bounds.startDate;
+      if (bounds.endDate) $('endDate').value = bounds.endDate;
+    }
+
+    function renderRoundDateFields(existingDates) {
+      const container = $('roundDateFields');
+      if (!container) return;
+      const current = { ...collectRoundDatesFromDom(), ...(existingDates || {}) };
+      const count = Number($('roundCount')?.value || 1);
+      container.innerHTML = Array.from({ length: count }, (_, index) => {
+        const round = String(index + 1);
+        return `
+          <div class="field">
+            <label for="roundDate${round}">Round ${round}</label>
+            <input id="roundDate${round}" type="date" data-round-date="${round}" value="${PGAPlatform.escapeHtml(current[round] || '')}">
+          </div>
+        `;
+      }).join('');
+      document.querySelectorAll('[data-round-date]').forEach(input => {
+        input.addEventListener('change', syncScheduleBounds);
+      });
+      syncScheduleBounds();
+    }
+
     function openTournamentModal(tournamentId) {
       appState.editingId = tournamentId || null;
       const tournament = appState.tournaments.find(t => t.id === tournamentId) || {};
@@ -313,6 +388,9 @@
       $('tournamentYear').value = tournament.year || defaultYear();
       $('tournamentVenue').value = tournament.venue || '';
       $('roundCount').value = String(tournament.roundCount || 2);
+      renderRoundDateFields(tournament.roundDates || {});
+      $('startDate').value = tournament.startDate || dateBounds(tournament.roundDates).startDate || '';
+      $('endDate').value = tournament.endDate || dateBounds(tournament.roundDates).endDate || '';
       $('cutEnabled').value = String(Boolean(tournament.cutEnabled));
       updateCutRoundOptions();
       $('cutAfterRound').value = String(tournament.cutAfterRound || 1);
@@ -337,11 +415,16 @@
     function formDataToTournament() {
       const roundCount = Number($('roundCount').value || 1);
       const cutEnabled = $('cutEnabled').value === 'true' && roundCount > 1;
+      const roundDates = collectRoundDatesFromDom();
+      const bounds = dateBounds(roundDates);
       return {
         name: $('tournamentName').value.trim(),
         year: Number($('tournamentYear').value || defaultYear()),
         venue: $('tournamentVenue').value.trim(),
         roundCount,
+        startDate: bounds.startDate || $('startDate').value,
+        endDate: bounds.endDate || $('endDate').value,
+        roundDates,
         cutEnabled,
         cutAfterRound: cutEnabled ? Number($('cutAfterRound').value || 1) : 1,
         cutPosition: cutEnabled ? Number($('cutPosition').value || 60) : 60,
@@ -413,6 +496,9 @@
           year: nextYear,
           venue: source.venue || '',
           roundCount: Number(source.roundCount || 1),
+          startDate: source.startDate || '',
+          endDate: source.endDate || '',
+          roundDates: source.roundDates || {},
           cutEnabled: Boolean(source.cutEnabled),
           cutAfterRound: Number(source.cutAfterRound || 1),
           cutPosition: Number(source.cutPosition || 60),
@@ -455,7 +541,7 @@
         applyFilters();
       }, error => {
         console.error('[v17 tournaments] snapshot error', error);
-        $('tournamentsTableBody').innerHTML = `<tr><td colspan="9" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
+        $('tournamentsTableBody').innerHTML = `<tr><td colspan="10" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
       });
     }
 
@@ -477,6 +563,7 @@
       });
       $('tournamentForm').addEventListener('submit', saveTournament);
       $('roundCount').addEventListener('change', updateCutRoundOptions);
+      $('roundCount').addEventListener('change', () => renderRoundDateFields());
       $('cutEnabled').addEventListener('change', updateCutRoundOptions);
       $('reloadTournamentsBtn').onclick = () => {
         subscribeTournaments();
