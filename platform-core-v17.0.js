@@ -16,8 +16,9 @@
     'kana',
     'affiliation',
     'qualification',
-    'eligibilityYear',
-    'hasTourEligibility',
+    'year',
+    'registered',
+    'seed',
     'qualifierRank',
     'birthDate',
     'email',
@@ -354,19 +355,57 @@
     return '';
   }
 
+  function booleanValue(value) {
+    return value === true || ['true', '1', 'yes', 'y', '有', 'あり', '対象'].includes(String(value ?? '').trim().toLowerCase());
+  }
+
+  function rankValue(value) {
+    const rank = Number(value);
+    return Number.isFinite(rank) && rank > 0 ? rank : null;
+  }
+
+  function getYearEligibility(player, year) {
+    const key = String(year || '').trim();
+    const stored = key && player?.years && typeof player.years === 'object' ? player.years[key] : null;
+    if (stored && typeof stored === 'object') {
+      const registered = booleanValue(stored.registered);
+      return {
+        registered,
+        seed: registered && booleanValue(stored.seed),
+        qualifierRank: registered ? rankValue(stored.qualifierRank) : null,
+        source: 'years'
+      };
+    }
+    if (key && Number(player?.eligibilityYear || 0) === Number(key)) {
+      return {
+        registered: true,
+        seed: booleanValue(player?.hasTourEligibility),
+        qualifierRank: rankValue(player?.qualifierRank),
+        source: 'legacy'
+      };
+    }
+    return { registered: false, seed: false, qualifierRank: null, source: 'none' };
+  }
+
   function normalizePlayerRecord(record) {
     const status = firstValue(record, ['status', 'ステータス']) || 'active';
-    const eligibility = firstValue(record, ['hasTourEligibility', '出場資格', '出場資格有無']);
-    const hasTourEligibility = eligibility === '' ? null : ['true', '1', 'yes', 'y', '有', 'あり', '対象'].includes(String(eligibility).trim().toLowerCase());
+    const year = firstValue(record, ['year', '年度', 'eligibilityYear', '出場資格年度']);
+    const registeredValue = firstValue(record, ['registered', '年間登録']);
+    const seedValue = firstValue(record, ['seed', 'シード資格', 'hasTourEligibility', '出場資格', '出場資格有無']);
+    const registered = registeredValue === '' ? (year ? true : null) : booleanValue(registeredValue);
+    const seed = seedValue === '' ? null : booleanValue(seedValue);
     return {
       playerId: firstValue(record, ['playerId', 'id', 'ID', '選手ID']),
       name: firstValue(record, ['name', '氏名', '名前']),
       kana: firstValue(record, ['kana', 'フリガナ', 'ふりがな']),
       affiliation: firstValue(record, ['affiliation', '所属']),
       qualification: firstValue(record, ['qualification', '資格区分']),
-      eligibilityYear: firstValue(record, ['eligibilityYear', '出場資格年度']),
-      hasTourEligibility,
+      year,
+      registered,
+      seed,
       qualifierRank: firstValue(record, ['qualifierRank', '予選会ランキング', '予選会順位']),
+      eligibilityYear: year,
+      hasTourEligibility: seed,
       birthDate: firstValue(record, ['birthDate', '生年月日']),
       email: firstValue(record, ['email', 'メールアドレス', 'メール']),
       phone: firstValue(record, ['phone', '電話番号', '電話']),
@@ -398,6 +437,9 @@
     objectsToCsv,
     downloadText,
     readFileAsText,
-    normalizePlayerRecord
+    normalizePlayerRecord,
+    booleanValue,
+    getYearEligibility,
+    rankValue
   };
 })(window);

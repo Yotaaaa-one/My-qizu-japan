@@ -11,7 +11,7 @@
     <aside class="adminSidebar">
       <div class="adminBrand">
         <strong>PGA Tournament Platform</strong>
-        <span>v17.0 Phase 3-C</span>
+        <span>v17.0 Phase 3-D</span>
       </div>
       <nav class="adminNav">
         <a href="./admin.html">管理トップ</a>
@@ -62,12 +62,20 @@
             <select id="searchStatus"></select>
           </div>
           <div class="field">
-            <label for="searchEligibilityYear">出場資格年度</label>
-            <input id="searchEligibilityYear" type="number" min="2000" max="2100" placeholder="例: 2026">
+            <label for="displayEligibilityYear">表示年度</label>
+            <select id="displayEligibilityYear"></select>
           </div>
           <div class="field">
-            <label for="searchTourEligibility">出場資格</label>
-            <select id="searchTourEligibility">
+            <label for="searchRegistered">年間登録</label>
+            <select id="searchRegistered">
+              <option value="">すべて</option>
+              <option value="true">有</option>
+              <option value="false">無</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="searchSeed">シード資格</label>
+            <select id="searchSeed">
               <option value="">すべて</option>
               <option value="true">有</option>
               <option value="false">無</option>
@@ -109,8 +117,8 @@
                 <th><button type="button" class="sortHeader" data-sort-key="kana">フリガナ <span class="sortIndicator"></span></button></th>
                 <th><button type="button" class="sortHeader" data-sort-key="affiliation">所属 <span class="sortIndicator"></span></button></th>
                 <th><button type="button" class="sortHeader" data-sort-key="qualification">資格区分 <span class="sortIndicator"></span></button></th>
-                <th><button type="button" class="sortHeader" data-sort-key="eligibilityYear">出場資格年度 <span class="sortIndicator"></span></button></th>
-                <th><button type="button" class="sortHeader" data-sort-key="hasTourEligibility">出場資格 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="registered">年間登録 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="seed">シード資格 <span class="sortIndicator"></span></button></th>
                 <th><button type="button" class="sortHeader" data-sort-key="qualifierRank">予選会ランキング <span class="sortIndicator"></span></button></th>
                 <th>生年月日</th>
                 <th>メール</th>
@@ -155,12 +163,19 @@
               <select id="playerQualification" name="qualification"></select>
             </div>
             <div class="field">
-              <label for="playerEligibilityYear">出場資格年度</label>
-              <input id="playerEligibilityYear" name="eligibilityYear" type="number" min="2000" max="2100" placeholder="例: 2026">
+              <label for="playerQualificationYear">年度別資格 年度</label>
+              <select id="playerQualificationYear" name="year"></select>
             </div>
             <div class="field">
-              <label for="playerTourEligibility">出場資格</label>
-              <select id="playerTourEligibility" name="hasTourEligibility">
+              <label for="playerRegistered">年間登録</label>
+              <select id="playerRegistered" name="registered">
+                <option value="false">無</option>
+                <option value="true">有</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="playerSeed">シード資格</label>
+              <select id="playerSeed" name="seed">
                 <option value="false">無</option>
                 <option value="true">有</option>
               </select>
@@ -211,14 +226,37 @@
 
     const $ = id => document.getElementById(id);
 
-    function isTourEligible(player) {
-      return player?.hasTourEligibility === true || ['true', '1', 'yes', '有', 'あり', '対象'].includes(String(player?.hasTourEligibility || '').toLowerCase());
-    }
-
     function fillSelect(select, rows, includeAllLabel) {
       if (!select) return;
       const options = includeAllLabel ? [{ value: '', label: includeAllLabel }, ...rows] : rows;
       select.innerHTML = options.map(row => `<option value="${PGAPlatform.escapeHtml(row.value)}">${PGAPlatform.escapeHtml(row.label)}</option>`).join('');
+    }
+
+    function qualificationYears(player) {
+      const current = new Date().getFullYear();
+      const years = new Set(Array.from({ length: 7 }, (_, index) => String(current - 2 + index)));
+      appState.players.forEach(item => {
+        Object.keys(item.years || {}).forEach(year => years.add(String(year)));
+        if (item.eligibilityYear) years.add(String(item.eligibilityYear));
+      });
+      Object.keys(player?.years || {}).forEach(year => years.add(String(year)));
+      if (player?.eligibilityYear) years.add(String(player.eligibilityYear));
+      return [...years].sort((left, right) => Number(right) - Number(left));
+    }
+
+    function fillYearSelect(select, selected) {
+      if (!select) return;
+      const years = qualificationYears();
+      select.innerHTML = years.map(year => `<option value="${year}">${year}年度</option>`).join('');
+      select.value = years.includes(String(selected)) ? String(selected) : (years[0] || '');
+    }
+
+    function displayYear() {
+      return $('displayEligibilityYear')?.value || '';
+    }
+
+    function yearEligibility(player, year = displayYear()) {
+      return PGAPlatform.getYearEligibility(player, year);
     }
 
     function collectFilters() {
@@ -228,8 +266,9 @@
         affiliation: PGAPlatform.normalizeText($('searchAffiliation')?.value),
         qualification: $('searchQualification')?.value || '',
         status: $('searchStatus')?.value || '',
-        eligibilityYear: $('searchEligibilityYear')?.value || '',
-        hasTourEligibility: $('searchTourEligibility')?.value || '',
+        year: displayYear(),
+        registered: $('searchRegistered')?.value || '',
+        seed: $('searchSeed')?.value || '',
         qualifierRankMin: $('searchQualifierRankMin')?.value || '',
         qualifierRankMax: $('searchQualifierRankMax')?.value || ''
       };
@@ -243,10 +282,12 @@
         if (f.affiliation && !PGAPlatform.normalizeText(player.affiliation).includes(f.affiliation)) return false;
         if (f.qualification && player.qualification !== f.qualification) return false;
         if (f.status && player.status !== f.status) return false;
-        if (f.eligibilityYear && Number(player.eligibilityYear || 0) !== Number(f.eligibilityYear)) return false;
-        if (f.hasTourEligibility === 'true' && !isTourEligible(player)) return false;
-        if (f.hasTourEligibility === 'false' && isTourEligible(player)) return false;
-        const rank = Number(player.qualifierRank || 0);
+        const eligibility = yearEligibility(player, f.year);
+        if (f.registered === 'true' && !eligibility.registered) return false;
+        if (f.registered === 'false' && eligibility.registered) return false;
+        if (f.seed === 'true' && !eligibility.seed) return false;
+        if (f.seed === 'false' && eligibility.seed) return false;
+        const rank = Number(eligibility.qualifierRank || 0);
         if (f.qualifierRankMin && (!rank || rank < Number(f.qualifierRankMin))) return false;
         if (f.qualifierRankMax && (!rank || rank > Number(f.qualifierRankMax))) return false;
         return true;
@@ -258,13 +299,23 @@
     function sortPlayers(players) {
       const { key, direction } = appState.sort;
       const multiplier = direction === 'asc' ? 1 : -1;
-      const numericKeys = new Set(['eligibilityYear', 'qualifierRank']);
+      const numericKeys = new Set(['qualifierRank']);
       const labels = {
         qualification: value => PGAPlatform.qualificationLabel(value),
         status: value => PGAPlatform.statusLabel(value),
-        hasTourEligibility: value => isTourEligible({ hasTourEligibility: value }) ? 1 : 0
+        registered: value => value ? 1 : 0,
+        seed: value => value ? 1 : 0
       };
-      const valueFor = player => labels[key] ? labels[key](player[key]) : player[key];
+      const valueFor = player => {
+        const eligibility = yearEligibility(player);
+        const values = {
+          registered: eligibility.registered,
+          seed: eligibility.seed,
+          qualifierRank: eligibility.qualifierRank
+        };
+        const value = Object.prototype.hasOwnProperty.call(values, key) ? values[key] : player[key];
+        return labels[key] ? labels[key](value) : value;
+      };
       return [...players].sort((left, right) => {
         const leftValue = valueFor(left);
         const rightValue = valueFor(right);
@@ -273,7 +324,7 @@
         if (leftEmpty && rightEmpty) return String(left.kana || left.name || '').localeCompare(String(right.kana || right.name || ''), 'ja');
         if (leftEmpty) return 1;
         if (rightEmpty) return -1;
-        const compared = numericKeys.has(key) || key === 'hasTourEligibility'
+        const compared = numericKeys.has(key) || key === 'registered' || key === 'seed'
           ? Number(leftValue) - Number(rightValue)
           : String(leftValue).localeCompare(String(rightValue), 'ja');
         if (compared !== 0) return compared * multiplier;
@@ -302,15 +353,17 @@
         return;
       }
 
-      body.innerHTML = appState.filtered.map(player => `
+      body.innerHTML = appState.filtered.map(player => {
+        const eligibility = yearEligibility(player);
+        return `
         <tr>
           <td><strong>${PGAPlatform.escapeHtml(player.name || '')}</strong></td>
           <td>${PGAPlatform.escapeHtml(player.kana || '')}</td>
           <td>${PGAPlatform.escapeHtml(player.affiliation || '')}</td>
           <td>${PGAPlatform.escapeHtml(PGAPlatform.qualificationLabel(player.qualification))}</td>
-          <td>${PGAPlatform.escapeHtml(player.eligibilityYear || '')}</td>
-          <td><span class="${isTourEligible(player) ? 'badge' : 'badge disabled'}">${isTourEligible(player) ? '有' : '無'}</span></td>
-          <td>${PGAPlatform.escapeHtml(player.qualifierRank || '')}</td>
+          <td><span class="${eligibility.registered ? 'badge' : 'badge disabled'}">${eligibility.registered ? '有' : '無'}</span></td>
+          <td><span class="${eligibility.seed ? 'badge' : 'badge disabled'}">${eligibility.seed ? '有' : '無'}</span></td>
+          <td>${PGAPlatform.escapeHtml(eligibility.qualifierRank || '')}</td>
           <td>${PGAPlatform.escapeHtml(player.birthDate || '')}</td>
           <td>${PGAPlatform.escapeHtml(player.email || '')}</td>
           <td>${PGAPlatform.escapeHtml(player.phone || '')}</td>
@@ -318,7 +371,8 @@
           <td>${PGAPlatform.escapeHtml(PGAPlatform.formatDateTime(player.updatedAt))}</td>
           <td><button class="btn secondary" data-edit-player="${player.id}">編集</button></td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       document.querySelectorAll('[data-edit-player]').forEach(btn => {
         btn.onclick = () => openPlayerModal(btn.dataset.editPlayer);
@@ -333,9 +387,8 @@
       $('playerKana').value = player.kana || '';
       $('playerAffiliation').value = player.affiliation || '';
       $('playerQualification').value = player.qualification || '';
-      $('playerEligibilityYear').value = player.eligibilityYear || '';
-      $('playerTourEligibility').value = isTourEligible(player) ? 'true' : 'false';
-      $('playerQualifierRank').value = player.qualifierRank || '';
+      fillYearSelect($('playerQualificationYear'), displayYear() || player.eligibilityYear || '');
+      loadPlayerYearEligibility(player);
       $('playerBirthDate').value = player.birthDate || '';
       $('playerEmail').value = player.email || '';
       $('playerPhone').value = player.phone || '';
@@ -352,15 +405,30 @@
       appState.editingId = null;
     }
 
+    function loadPlayerYearEligibility(player) {
+      const eligibility = yearEligibility(player, $('playerQualificationYear').value);
+      $('playerRegistered').value = eligibility.registered ? 'true' : 'false';
+      $('playerSeed').value = eligibility.seed ? 'true' : 'false';
+      $('playerQualifierRank').value = eligibility.qualifierRank || '';
+      syncPlayerYearControls();
+    }
+
+    function syncPlayerYearControls() {
+      const registered = $('playerRegistered').value === 'true';
+      if (!registered) {
+        $('playerSeed').value = 'false';
+        $('playerQualifierRank').value = '';
+      }
+      $('playerSeed').disabled = !registered;
+      $('playerQualifierRank').disabled = !registered;
+    }
+
     function formDataToPlayer() {
       return {
         name: $('playerName').value.trim(),
         kana: $('playerKana').value.trim(),
         affiliation: $('playerAffiliation').value.trim(),
         qualification: $('playerQualification').value,
-        eligibilityYear: $('playerEligibilityYear').value ? Number($('playerEligibilityYear').value) : null,
-        hasTourEligibility: $('playerTourEligibility').value === 'true',
-        qualifierRank: $('playerQualifierRank').value ? Number($('playerQualifierRank').value) : null,
         birthDate: $('playerBirthDate').value,
         email: $('playerEmail').value.trim(),
         phone: $('playerPhone').value.trim(),
@@ -368,9 +436,24 @@
       };
     }
 
+    function yearEligibilityFromForm() {
+      const year = $('playerQualificationYear').value;
+      const registered = $('playerRegistered').value === 'true';
+      return {
+        year,
+        value: {
+          registered,
+          seed: registered && $('playerSeed').value === 'true',
+          qualifierRank: registered && $('playerQualifierRank').value ? Number($('playerQualifierRank').value) : null,
+          updatedAt: PGAPlatform.serverTimestamp()
+        }
+      };
+    }
+
     async function savePlayer(event) {
       event.preventDefault();
       const data = formDataToPlayer();
+      const annual = yearEligibilityFromForm();
       const errorBox = $('playerFormError');
       errorBox.classList.remove('show');
       if (!data.name) {
@@ -381,6 +464,7 @@
 
       try {
         const collection = PGAPlatform.db().collection('players');
+        data.years = annual.year ? { [annual.year]: annual.value } : {};
         if (appState.editingId) {
           await collection.doc(appState.editingId).set({
             ...data,
@@ -406,6 +490,7 @@
       if (appState.unsubscribe) appState.unsubscribe();
       appState.unsubscribe = PGAPlatform.db().collection('players').onSnapshot(snapshot => {
         appState.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        fillYearSelect($('displayEligibilityYear'), displayYear());
         applyFilters();
       }, error => {
         console.error('[v17 players] snapshot error', error);
@@ -414,22 +499,27 @@
     }
 
     function exportCsv() {
-      const rows = appState.filtered.map(player => ({
+      const year = displayYear();
+      const rows = appState.filtered.map(player => {
+        const eligibility = yearEligibility(player, year);
+        return {
         playerId: player.id,
         name: player.name || '',
         kana: player.kana || '',
         affiliation: player.affiliation || '',
         qualification: player.qualification || '',
-        eligibilityYear: player.eligibilityYear || '',
-        hasTourEligibility: isTourEligible(player),
-        qualifierRank: player.qualifierRank || '',
+        year,
+        registered: eligibility.registered,
+        seed: eligibility.seed,
+        qualifierRank: eligibility.qualifierRank || '',
         birthDate: player.birthDate || '',
         email: player.email || '',
         phone: player.phone || '',
         status: player.status || '',
         createdAt: PGAPlatform.formatDateTime(player.createdAt),
         updatedAt: PGAPlatform.formatDateTime(player.updatedAt)
-      }));
+      };
+      });
       const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       PGAPlatform.downloadText(`players_master_${stamp}.csv`, PGAPlatform.objectsToCsv(rows), 'text/csv;charset=utf-8');
       PGAPlatform.showToast('CSVを書き出しました。');
@@ -470,15 +560,23 @@
             kana: row.kana,
             affiliation: row.affiliation,
             qualification: row.qualification,
-            eligibilityYear: row.eligibilityYear ? Number(row.eligibilityYear) : null,
-            qualifierRank: row.qualifierRank ? Number(row.qualifierRank) : null,
             birthDate: row.birthDate,
             email: row.email,
             phone: row.phone,
             status: row.status || 'active',
             updatedAt: PGAPlatform.serverTimestamp()
           };
-          if (row.hasTourEligibility !== null) data.hasTourEligibility = Boolean(row.hasTourEligibility);
+          if (row.year) {
+            const registered = row.registered === null ? true : Boolean(row.registered);
+            data.years = {
+              [String(row.year)]: {
+                registered,
+                seed: registered && Boolean(row.seed),
+                qualifierRank: registered && row.qualifierRank ? Number(row.qualifierRank) : null,
+                updatedAt: PGAPlatform.serverTimestamp()
+              }
+            };
+          }
           if (!exists) data.createdAt = PGAPlatform.serverTimestamp();
           batch.set(ref, data, { merge: true });
           pending += 1;
@@ -495,15 +593,16 @@
     }
 
     function bindEvents() {
-      ['searchName', 'searchKana', 'searchAffiliation', 'searchQualification', 'searchStatus', 'searchEligibilityYear', 'searchTourEligibility', 'searchQualifierRankMin', 'searchQualifierRankMax'].forEach(id => {
+      ['searchName', 'searchKana', 'searchAffiliation', 'searchQualification', 'searchStatus', 'displayEligibilityYear', 'searchRegistered', 'searchSeed', 'searchQualifierRankMin', 'searchQualifierRankMax'].forEach(id => {
         $(id)?.addEventListener('input', applyFilters);
         $(id)?.addEventListener('change', applyFilters);
       });
       $('resetSearchBtn').onclick = () => {
-        ['searchName', 'searchKana', 'searchAffiliation', 'searchEligibilityYear', 'searchQualifierRankMin', 'searchQualifierRankMax'].forEach(id => { $(id).value = ''; });
+        ['searchName', 'searchKana', 'searchAffiliation', 'searchQualifierRankMin', 'searchQualifierRankMax'].forEach(id => { $(id).value = ''; });
         $('searchQualification').value = '';
         $('searchStatus').value = '';
-        $('searchTourEligibility').value = '';
+        $('searchRegistered').value = '';
+        $('searchSeed').value = '';
         applyFilters();
       };
       $('newPlayerBtn').onclick = () => openPlayerModal(null);
@@ -512,6 +611,11 @@
         if (event.target === $('playerModal')) closePlayerModal();
       });
       $('playerForm').addEventListener('submit', savePlayer);
+      $('playerQualificationYear').addEventListener('change', () => {
+        const player = appState.players.find(item => item.id === appState.editingId) || {};
+        loadPlayerYearEligibility(player);
+      });
+      $('playerRegistered').addEventListener('change', syncPlayerYearControls);
       $('exportCsvBtn').onclick = exportCsv;
       $('importCsvBtn').onclick = () => $('csvFileInput').click();
       $('csvFileInput').onchange = event => importCsv(event.target.files?.[0]);
@@ -536,6 +640,7 @@
       fillSelect($('searchStatus'), PGAPlatform.STATUSES, 'すべて');
       fillSelect($('playerQualification'), PGAPlatform.QUALIFICATIONS, null);
       fillSelect($('playerStatus'), PGAPlatform.STATUSES, null);
+      fillYearSelect($('displayEligibilityYear'), new Date().getFullYear());
       bindEvents();
       subscribePlayers();
       PGAPlatform.bindLogoutButtons();

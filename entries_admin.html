@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>出場者管理 v17.0 Phase 3-C</title>
+  <title>出場者管理 v17.0 Phase 3-D</title>
   <link rel="stylesheet" href="./platform-admin-v17.0.css">
 </head>
 <body class="platform-admin">
@@ -11,7 +11,7 @@
     <aside class="adminSidebar">
       <div class="adminBrand">
         <strong>PGA Tournament Platform</strong>
-        <span>v17.0 Phase 3-C</span>
+        <span>v17.0 Phase 3-D</span>
       </div>
       <nav class="adminNav">
         <a href="./admin.html">管理トップ</a>
@@ -95,15 +95,16 @@
         </div>
         <div class="formGrid three">
           <div class="field">
-            <label for="bulkEligibilityYear">大会年度</label>
+            <label for="bulkEligibilityYear">対象年度</label>
             <input id="bulkEligibilityYear" type="number" min="2000" max="2100" placeholder="例: 2026">
           </div>
           <div class="field">
             <label for="bulkRegistrationMode">登録方法</label>
             <select id="bulkRegistrationMode">
-              <option value="eligibility_only">出場資格ありのみ</option>
+              <option value="registered_all">年間登録者すべて</option>
+              <option value="seed_only">シード選手のみ</option>
               <option value="rank_only">予選会ランキング上限指定</option>
-              <option value="eligibility_or_rank">出場資格あり + 予選会ランキング上限</option>
+              <option value="seed_or_rank">シード選手 + 予選会ランキング上限指定</option>
             </select>
           </div>
           <div class="field">
@@ -140,8 +141,9 @@
                 <th>氏名</th>
                 <th>所属</th>
                 <th>資格区分</th>
-                <th>出場資格年度</th>
-                <th>出場資格</th>
+                <th>対象年度</th>
+                <th>年間登録</th>
+                <th>シード資格</th>
                 <th>予選会ランキング</th>
                 <th>エントリー状態</th>
                 <th>承認状態</th>
@@ -150,7 +152,7 @@
               </tr>
             </thead>
             <tbody id="entriesTableBody">
-              <tr><td colspan="10" class="tableEmpty">大会選択後に読み込みます。</td></tr>
+              <tr><td colspan="11" class="tableEmpty">大会選択後に読み込みます。</td></tr>
             </tbody>
           </table>
         </div>
@@ -187,8 +189,21 @@
     };
     const $ = id => document.getElementById(id);
 
-    function isTourEligible(value) {
-      return value === true || ['true', '1', 'yes', '有', 'あり', '対象'].includes(String(value || '').toLowerCase());
+    function entryEligibility(entry) {
+      if (entry?.registered !== undefined && entry?.registered !== null) {
+        const registered = PGAPlatform.booleanValue(entry.registered);
+        return {
+          registered,
+          seed: registered && PGAPlatform.booleanValue(entry.seed),
+          qualifierRank: registered ? PGAPlatform.rankValue(entry.qualifierRank) : null
+        };
+      }
+      const legacyRegistered = Number(entry?.eligibilityYear || 0) > 0;
+      return {
+        registered: legacyRegistered,
+        seed: legacyRegistered && PGAPlatform.booleanValue(entry?.hasTourEligibility),
+        qualifierRank: legacyRegistered ? PGAPlatform.rankValue(entry?.qualifierRank) : null
+      };
     }
 
     function labelOf(rows, value) {
@@ -306,7 +321,7 @@
         renderPlayerSelect();
         updateBulkRegistrationPreview();
       }, error => {
-        $('entriesTableBody').innerHTML = `<tr><td colspan="10" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
+        $('entriesTableBody').innerHTML = `<tr><td colspan="11" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
       });
     }
 
@@ -338,7 +353,8 @@
         if (filters.entryStatus && entry.entryStatus !== filters.entryStatus) return false;
         if (filters.approvalStatus && entry.approvalStatus !== filters.approvalStatus) return false;
         if (!filters.keyword) return true;
-        return [entry.playerName, entry.kana, entry.affiliation, entry.qualification, entry.eligibilityYear, entry.qualifierRank]
+        const eligibility = entryEligibility(entry);
+        return [entry.playerName, entry.kana, entry.affiliation, entry.qualification, entry.eligibilityYear, eligibility.registered ? '年間登録' : '', eligibility.seed ? 'シード' : '', eligibility.qualifierRank]
           .map(PGAPlatform.normalizeText).join(' ').includes(filters.keyword);
       });
       renderEntries();
@@ -361,21 +377,24 @@
       $('entryCountLabel').textContent = `${appState.filteredEntries.length}件 / 全${appState.entries.length}件`;
       $('entryUpdatedLabel').textContent = `更新 ${new Date().toLocaleTimeString('ja-JP', { hour12: false })}`;
       if (!appState.selectedTournamentId) {
-        body.innerHTML = '<tr><td colspan="10" class="tableEmpty">大会を選択してください。</td></tr>';
+        body.innerHTML = '<tr><td colspan="11" class="tableEmpty">大会を選択してください。</td></tr>';
         return;
       }
       if (!appState.filteredEntries.length) {
-        body.innerHTML = '<tr><td colspan="10" class="tableEmpty">該当する出場者がいません。</td></tr>';
+        body.innerHTML = '<tr><td colspan="11" class="tableEmpty">該当する出場者がいません。</td></tr>';
         return;
       }
-      body.innerHTML = appState.filteredEntries.map(entry => `
+      body.innerHTML = appState.filteredEntries.map(entry => {
+        const eligibility = entryEligibility(entry);
+        return `
         <tr>
           <td><strong>${PGAPlatform.escapeHtml(entry.playerName || '')}</strong><br><span class="smallText">${PGAPlatform.escapeHtml(entry.kana || '')}</span></td>
           <td>${PGAPlatform.escapeHtml(entry.affiliation || '')}</td>
           <td>${PGAPlatform.escapeHtml(PGAPlatform.qualificationLabel(entry.qualification))}</td>
           <td>${PGAPlatform.escapeHtml(entry.eligibilityYear || '')}</td>
-          <td><span class="${isTourEligible(entry.hasTourEligibility) ? 'badge' : 'badge disabled'}">${isTourEligible(entry.hasTourEligibility) ? '有' : '無'}</span></td>
-          <td>${PGAPlatform.escapeHtml(entry.qualifierRank || '')}</td>
+          <td><span class="${eligibility.registered ? 'badge' : 'badge disabled'}">${eligibility.registered ? '有' : '無'}</span></td>
+          <td><span class="${eligibility.seed ? 'badge' : 'badge disabled'}">${eligibility.seed ? '有' : '無'}</span></td>
+          <td>${PGAPlatform.escapeHtml(eligibility.qualifierRank || '')}</td>
           <td><select data-entry-status="${entry.id}">${ENTRY_STATUSES.map(row => `<option value="${row.value}" ${row.value === entry.entryStatus ? 'selected' : ''}>${row.label}</option>`).join('')}</select></td>
           <td><select data-approval-status="${entry.id}">${APPROVAL_STATUSES.map(row => `<option value="${row.value}" ${row.value === entry.approvalStatus ? 'selected' : ''}>${row.label}</option>`).join('')}</select></td>
           <td>${PGAPlatform.escapeHtml(PGAPlatform.formatDateTime(entry.updatedAt))}</td>
@@ -388,7 +407,8 @@
             <button class="btn danger" data-delete-entry="${entry.id}">削除</button>
           </div></td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
       bindEntryRowButtons();
     }
 
@@ -436,15 +456,19 @@
     }
 
     function entryDataFromPlayer(player, values = {}) {
+      const eligibilityYear = Number(values.eligibilityYear ?? selectedTournamentYear()) || null;
+      const annual = PGAPlatform.getYearEligibility(player, eligibilityYear);
+      const registered = values.registered ?? annual.registered;
       return {
         playerId: player.id || values.playerId || '',
         playerName: values.playerName || player.name || '',
         kana: values.kana || player.kana || '',
         affiliation: values.affiliation || player.affiliation || '',
         qualification: values.qualification || player.qualification || '',
-        eligibilityYear: values.eligibilityYear ?? (player.eligibilityYear ? Number(player.eligibilityYear) : null),
-        hasTourEligibility: values.hasTourEligibility ?? isTourEligible(player.hasTourEligibility),
-        qualifierRank: values.qualifierRank ?? (player.qualifierRank ? Number(player.qualifierRank) : null),
+        eligibilityYear,
+        registered,
+        seed: registered && (values.seed ?? annual.seed),
+        qualifierRank: registered ? (values.qualifierRank ?? annual.qualifierRank) : null,
         entryStatus: values.entryStatus || 'entered',
         approvalStatus: values.approvalStatus || 'pending'
       };
@@ -459,7 +483,7 @@
       try {
         const exists = await docRef.get().then(snapshot => snapshot.exists);
         if (exists) return PGAPlatform.showToast('この選手はすでに出場者に登録されています。');
-        await docRef.set({ ...entryDataFromPlayer(player), entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() });
+        await docRef.set({ ...entryDataFromPlayer(player, { eligibilityYear: selectedTournamentYear() }), entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() });
         PGAPlatform.showToast('出場者に追加しました。');
       } catch (error) {
         PGAPlatform.showToast('出場者の追加に失敗しました: ' + (error.message || error.code));
@@ -470,20 +494,22 @@
       const year = Number($('bulkEligibilityYear').value || 0);
       const rankMax = Number($('bulkQualifierRankMax').value || 0);
       const mode = $('bulkRegistrationMode').value;
-      if (!appState.selectedTournamentId || !year || (mode !== 'eligibility_only' && !rankMax)) return [];
+      const rankRequired = mode === 'rank_only' || mode === 'seed_or_rank';
+      if (!appState.selectedTournamentId || !year || (rankRequired && !rankMax)) return [];
       return appState.players.filter(player => {
-        const rank = Number(player.qualifierRank || 0);
-        if (Number(player.eligibilityYear || 0) !== year) return false;
-        const eligible = isTourEligible(player.hasTourEligibility);
-        const ranked = rank > 0 && rank <= rankMax;
-        if (mode === 'eligibility_only') return eligible;
+        const eligibility = PGAPlatform.getYearEligibility(player, year);
+        if (!eligibility.registered) return false;
+        const ranked = !eligibility.seed && Number(eligibility.qualifierRank || 0) > 0 && Number(eligibility.qualifierRank) <= rankMax;
+        if (mode === 'registered_all') return true;
+        if (mode === 'seed_only') return eligibility.seed;
         if (mode === 'rank_only') return ranked;
-        return eligible || ranked;
+        return eligibility.seed || ranked;
       });
     }
 
     function syncBulkRegistrationControls() {
-      const rankRequired = $('bulkRegistrationMode').value !== 'eligibility_only';
+      const mode = $('bulkRegistrationMode').value;
+      const rankRequired = mode === 'rank_only' || mode === 'seed_or_rank';
       $('bulkQualifierRankMax').disabled = !rankRequired;
       $('bulkQualifierRankMax').required = rankRequired;
       $('bulkQualifierRankMax').placeholder = rankRequired ? '例: 30' : '指定不要';
@@ -502,7 +528,8 @@
         button.disabled = true;
         return;
       }
-      const needsRank = $('bulkRegistrationMode').value !== 'eligibility_only';
+      const mode = $('bulkRegistrationMode').value;
+      const needsRank = mode === 'rank_only' || mode === 'seed_or_rank';
       if (!$('bulkEligibilityYear').value || (needsRank && !$('bulkQualifierRankMax').value)) {
         summary.textContent = needsRank ? '年度と予選会ランキング上限を入力してください。' : '年度を入力してください。';
         button.disabled = true;
@@ -535,7 +562,7 @@
           pending = 0;
         };
         for (const player of targets) {
-          batch.set(ref.doc(player.id), { ...entryDataFromPlayer(player), entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() });
+          batch.set(ref.doc(player.id), { ...entryDataFromPlayer(player, { eligibilityYear: Number($('bulkEligibilityYear').value) }), entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() });
           pending += 1;
           if (pending >= 450) await commit();
         }
@@ -555,15 +582,15 @@
 
     function normalizeEntryRecord(record) {
       const player = PGAPlatform.normalizePlayerRecord(record);
-      const eligibility = first(record, ['hasTourEligibility', '出場資格', '出場資格有無']);
       return {
         playerId: player.playerId,
         playerName: first(record, ['playerName', 'name', '氏名', '名前']) || player.name,
         kana: player.kana,
         affiliation: player.affiliation,
         qualification: player.qualification,
-        eligibilityYear: player.eligibilityYear,
-        hasTourEligibility: eligibility === '' ? undefined : player.hasTourEligibility,
+        eligibilityYear: player.year,
+        registered: player.registered,
+        seed: player.seed,
         qualifierRank: player.qualifierRank,
         entryStatus: first(record, ['entryStatus', 'エントリー状態', '出場状態']) || 'entered',
         approvalStatus: first(record, ['approvalStatus', '承認状態']) || 'pending'
@@ -598,8 +625,9 @@
             kana: row.kana,
             affiliation: row.affiliation,
             qualification: row.qualification,
-            eligibilityYear: row.eligibilityYear ? Number(row.eligibilityYear) : null,
-            hasTourEligibility: row.hasTourEligibility,
+            eligibilityYear: row.eligibilityYear ? Number(row.eligibilityYear) : selectedTournamentYear(),
+            registered: row.registered,
+            seed: row.seed,
             qualifierRank: row.qualifierRank ? Number(row.qualifierRank) : null,
             entryStatus: row.entryStatus,
             approvalStatus: row.approvalStatus
@@ -619,23 +647,27 @@
     }
 
     function exportEntriesCsv() {
-      const rows = appState.filteredEntries.map(entry => ({
+      const rows = appState.filteredEntries.map(entry => {
+        const eligibility = entryEligibility(entry);
+        return {
         playerId: entry.playerId || entry.id,
         playerName: entry.playerName || '',
         kana: entry.kana || '',
         affiliation: entry.affiliation || '',
         qualification: entry.qualification || '',
-        eligibilityYear: entry.eligibilityYear || '',
-        hasTourEligibility: isTourEligible(entry.hasTourEligibility),
-        qualifierRank: entry.qualifierRank || '',
+        year: entry.eligibilityYear || '',
+        registered: eligibility.registered,
+        seed: eligibility.seed,
+        qualifierRank: eligibility.qualifierRank || '',
         entryStatus: entry.entryStatus || '',
         approvalStatus: entry.approvalStatus || '',
         entryAt: PGAPlatform.formatDateTime(entry.entryAt),
         updatedAt: PGAPlatform.formatDateTime(entry.updatedAt)
-      }));
+      };
+      });
       const tournamentName = String(selectedTournament()?.name || 'entries').replace(/[\\/:*?"<>|]/g, '_');
       PGAPlatform.downloadText(`entries_${tournamentName}.csv`, PGAPlatform.objectsToCsv(rows, [
-        'playerId', 'playerName', 'kana', 'affiliation', 'qualification', 'eligibilityYear', 'hasTourEligibility', 'qualifierRank', 'entryStatus', 'approvalStatus', 'entryAt', 'updatedAt'
+        'playerId', 'playerName', 'kana', 'affiliation', 'qualification', 'year', 'registered', 'seed', 'qualifierRank', 'entryStatus', 'approvalStatus', 'entryAt', 'updatedAt'
       ]), 'text/csv;charset=utf-8');
       PGAPlatform.showToast('CSVを書き出しました。');
     }
