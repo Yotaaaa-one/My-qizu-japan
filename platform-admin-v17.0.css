@@ -515,6 +515,85 @@ a {
   display: none !important;
 }
 
+.pairingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.pairingGroup {
+  min-width: 0;
+  border: 1px solid var(--admin-line);
+  border-radius: 8px;
+  background: var(--admin-panel);
+  box-shadow: var(--admin-shadow);
+}
+
+.pairingGroupHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--admin-line);
+  background: var(--admin-panel-soft);
+}
+
+.pairingGroupFields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(100px, 1fr));
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.compactField {
+  min-width: 0;
+}
+
+.compactField input,
+.compactField select {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.pairingPlayers,
+.unassignedList {
+  display: grid;
+}
+
+.pairingPlayer,
+.unassignedRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e6ebf0;
+}
+
+.pairingPlayer:last-child,
+.unassignedRow:last-child {
+  border-bottom: 0;
+}
+
+.pairingPlayer strong,
+.unassignedRow strong {
+  display: block;
+}
+
+.pairingPlayer select,
+.unassignedRow select {
+  min-height: 34px;
+  min-width: 132px;
+  border: 1px solid #cfd6df;
+  border-radius: 7px;
+  padding: 6px 8px;
+  color: var(--admin-text);
+  background: #fff;
+  font: inherit;
+}
+
 @media (max-width: 1040px) {
   .adminShell {
     grid-template-columns: 1fr;
@@ -532,6 +611,10 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .pairingGrid {
+    grid-template-columns: 1fr;
+  }
+
   .formGrid,
   .formGrid.three {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
@@ -545,14 +628,18 @@ a {
 
   .adminTopbar,
   .toolbar,
-  .panelHeader {
+  .panelHeader,
+  .pairingGroupHeader,
+  .pairingPlayer,
+  .unassignedRow {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .adminNav,
   .formGrid,
-  .formGrid.three {
+  .formGrid.three,
+  .pairingGroupFields {
     grid-template-columns: 1fr;
   }
 }
