@@ -413,6 +413,134 @@
     };
   }
 
+  function clonePlain(value, fallback = {}) {
+    try {
+      return JSON.parse(JSON.stringify(value ?? fallback));
+    } catch (error) {
+      return clonePlain(fallback, {});
+    }
+  }
+
+  function emptyRoundScoreStore() {
+    return { scores: {}, shots: {}, testScores: {}, testShots: {} };
+  }
+
+  function ensureCompatiblePlayerRounds(player, roundCount) {
+    const count = Math.max(1, Math.min(4, Number(roundCount || 1)));
+    if (!player.rounds || typeof player.rounds !== 'object' || Array.isArray(player.rounds)) player.rounds = {};
+    if (!player.rounds['1'] && ['scores', 'shots', 'testScores', 'testShots'].some(key => Object.keys(player[key] || {}).length)) {
+      player.rounds['1'] = {
+        scores: clonePlain(player.scores),
+        shots: clonePlain(player.shots),
+        testScores: clonePlain(player.testScores),
+        testShots: clonePlain(player.testShots)
+      };
+    }
+    for (let round = 1; round <= count; round += 1) {
+      const key = String(round);
+      if (!player.rounds[key] || typeof player.rounds[key] !== 'object') player.rounds[key] = emptyRoundScoreStore();
+      ['scores', 'shots', 'testScores', 'testShots'].forEach(field => {
+        if (!player.rounds[key][field] || typeof player.rounds[key][field] !== 'object') player.rounds[key][field] = {};
+      });
+    }
+    return player;
+  }
+
+  function scoreGroupsFromPairings(pairings, options = {}) {
+    const round = Math.max(1, Math.min(4, Number(options.round || 1)));
+    const roundCount = Math.max(round, Math.min(4, Number(options.roundCount || round)));
+    const existingPlayers = options.existingPlayers && typeof options.existingPlayers.get === 'function' ? options.existingPlayers : new Map();
+    return (pairings || []).slice().sort((left, right) => Number(left.groupId || left.id || 0) - Number(right.groupId || right.id || 0)).map(pairing => {
+      const groupId = Number(pairing.groupId || pairing.id || 0);
+      const plannedStart = pairing.startTime || pairing.plannedStart || '08:00';
+      const players = (pairing.players || []).slice().sort((left, right) => Number(left.order || 999) - Number(right.order || 999)).map((source, index) => {
+        const playerId = source.playerId || source.id;
+        const existing = existingPlayers.get(playerId);
+        const player = ensureCompatiblePlayerRounds(existing ? clonePlain(existing) : {
+          id: playerId,
+          name: source.playerName || source.name || '',
+          affiliation: source.affiliation || '',
+          status: 'active',
+          scores: {},
+          shots: {},
+          testScores: {},
+          testShots: {},
+          rounds: {}
+        }, roundCount);
+        player.id = playerId;
+        player.name = source.playerName || source.name || player.name || '';
+        player.affiliation = source.affiliation || player.affiliation || '';
+        player.status = player.status || 'active';
+        player.roundStarts = { ...(player.roundStarts || {}), [String(round)]: plannedStart };
+        player.startTimes = { ...(player.startTimes || {}), [String(round)]: plannedStart };
+        player.plannedStart = plannedStart;
+        player.startHole = Number(pairing.startHole) === 10 ? 10 : 1;
+        player.order = index + 1;
+        const activeStore = player.rounds[String(round)] || emptyRoundScoreStore();
+        player.scores = activeStore.scores;
+        player.shots = activeStore.shots;
+        player.testScores = activeStore.testScores;
+        player.testShots = activeStore.testShots;
+        return player;
+      });
+      return {
+        id: groupId,
+        name: pairing.groupName || pairing.name || `第${groupId}組`,
+        startHole: Number(pairing.startHole) === 10 ? 10 : 1,
+        plannedStart,
+        roundStarts: { [String(round)]: plannedStart },
+        mode: 'test',
+        liveStartedAt: null,
+        liveStartDiff: null,
+        players
+      };
+    });
+  }
+
+  function pairingSnapshot(pairings, round) {
+    return (pairings || []).map(group => ({
+      round: Number(round || group.round || 1),
+      groupId: Number(group.groupId || group.id || 0),
+      groupName: group.groupName || group.name || '',
+      startHole: Number(group.startHole) === 10 ? 10 : 1,
+      startTime: group.startTime || group.plannedStart || '',
+      players: (group.players || []).map((player, index) => ({
+        playerId: player.playerId || player.id,
+        playerName: player.playerName || player.name || '',
+        affiliation: player.affiliation || '',
+        order: Number(player.order || index + 1)
+      }))
+    }));
+  }
+
+  function buildInitialScoreState(master, roundOnePairings) {
+    const roundCount = Math.max(1, Math.min(4, Number(master?.roundCount || 1)));
+    const groups = scoreGroupsFromPairings(roundOnePairings, { round: 1, roundCount });
+    return {
+      tournamentName: master?.name || '',
+      roundCount,
+      currentRound: 1,
+      cutEnabled: Boolean(master?.cutEnabled) && roundCount > 1,
+      cutAfterRound: Math.max(1, Math.min(roundCount - 1 || 1, Number(master?.cutAfterRound || 1))),
+      cutPosition: Math.max(1, Number(master?.cutPosition || 60)),
+      cutIncludeTies: master?.cutIncludeTies !== false,
+      groups,
+      roundPairings: { '1': pairingSnapshot(roundOnePairings, 1) },
+      selectedGroupId: groups[0]?.id || 1,
+      selectedHole: groups[0]?.startHole || 1,
+      notices: [],
+      pace: {},
+      timeLogs: [],
+      suspension: { totalMinutes: 0, activeStart: null },
+      deviceGroupId: null,
+      assignedDeviceGroupIds: [],
+      publicFavorites: [],
+      publicOpenPlayers: [],
+      scorerOpenPlayers: [],
+      monitorOpenPlayers: []
+    };
+  }
+
   global.PGAPlatform = {
     VERSION,
     PLAYER_FIELDS,
@@ -440,6 +568,11 @@
     normalizePlayerRecord,
     booleanValue,
     getYearEligibility,
-    rankValue
+    rankValue,
+    clonePlain,
+    ensureCompatiblePlayerRounds,
+    scoreGroupsFromPairings,
+    pairingSnapshot,
+    buildInitialScoreState
   };
 })(window);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>組合せ管理 v17.0 Phase 4-A</title>
+  <title>組合せ管理 v17.0 Phase 4-B</title>
   <link rel="stylesheet" href="./platform-admin-v17.0.css">
 </head>
 <body class="platform-admin">
@@ -11,7 +11,7 @@
     <aside class="adminSidebar">
       <div class="adminBrand">
         <strong>PGA Tournament Platform</strong>
-        <span>v17.0 Phase 4-A</span>
+        <span>v17.0 Phase 4-B</span>
       </div>
       <nav class="adminNav">
         <a href="./admin.html">管理トップ</a>
@@ -19,7 +19,7 @@
         <a href="./tournaments_admin.html">大会マスター</a>
         <a href="./entries_admin.html">出場者管理</a>
         <a class="active" href="./pairings_admin.html">組合せ管理</a>
-        <span class="disabledNav">スコア生成 <small>準備中</small></span>
+        <a href="./tournament_build.html">スコア生成</a>
       </nav>
     </aside>
 
@@ -49,6 +49,10 @@
           <div class="field">
             <label for="tournamentSelect">大会</label>
             <select id="tournamentSelect"></select>
+          </div>
+          <div class="field">
+            <label for="targetRound">対象ラウンド</label>
+            <select id="targetRound"></select>
           </div>
         </div>
       </section>
@@ -81,12 +85,25 @@
             <input id="startInterval" type="number" min="1" max="120" value="10">
           </div>
           <div class="field">
+            <label for="creationPattern">作成パターン</label>
+            <select id="creationPattern">
+              <option value="normal">通常自動生成</option>
+              <option value="same">前ラウンドと同様に生成</option>
+              <option value="swap">OUT/INを入れ替えて生成</option>
+              <option value="score">現在スコア順で生成</option>
+            </select>
+          </div>
+          <div class="field">
             <label>&nbsp;</label>
             <button id="savePairingSettingsBtn" class="btn secondary" type="button">設定を保存</button>
           </div>
           <div class="field">
             <label>&nbsp;</label>
             <button id="autoGenerateBtn" class="btn" type="button">自動組合せ</button>
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="applyRoundToScoreBtn" class="btn ghost" type="button">選択Roundをスコアシステムへ反映</button>
           </div>
         </div>
       </section>
@@ -128,6 +145,7 @@
       entries: [],
       pairings: [],
       selectedTournamentId: '',
+      pairingSource: 'round',
       tournamentYearInitialized: false,
       tournamentsUnsubscribe: null,
       entriesUnsubscribe: null,
@@ -148,7 +166,16 @@
       return ref ? ref.collection('entries') : null;
     }
 
+    function selectedRound() {
+      return Math.max(1, Math.min(4, Number($('targetRound')?.value || 1)));
+    }
+
     function pairingsRef() {
+      const ref = tournamentRef();
+      return ref ? ref.collection('round_pairings').doc(String(selectedRound())).collection('groups') : null;
+    }
+
+    function legacyPairingsRef() {
       const ref = tournamentRef();
       return ref ? ref.collection('pairings') : null;
     }
@@ -224,15 +251,35 @@
       return { playersPerGroup, startMode, topStartTime, startInterval };
     }
 
+    function renderRoundOptions() {
+      const select = $('targetRound');
+      const tournament = selectedTournament();
+      const roundCount = Math.max(1, Math.min(4, Number(tournament?.roundCount || 1)));
+      const previous = Number(select.value || 1);
+      select.innerHTML = [1, 2, 3, 4].map(round => `<option value="${round}" ${round > roundCount ? 'disabled' : ''}>Round ${round}</option>`).join('');
+      select.value = String(previous <= roundCount ? previous : 1);
+      syncCreationPattern();
+    }
+
+    function syncCreationPattern() {
+      const round = selectedRound();
+      const select = $('creationPattern');
+      Array.from(select.options).forEach(option => {
+        option.disabled = round === 1 && option.value !== 'normal';
+      });
+      if (round === 1 && select.value !== 'normal') select.value = 'normal';
+    }
+
     function renderSelectedTournamentMeta() {
       const tournament = selectedTournament();
       if (!tournament) {
         $('selectedTournamentMeta').textContent = '大会を選択してください。';
         return;
       }
+      renderRoundOptions();
       const dates = tournament.startDate || tournament.endDate ? `${tournament.startDate || '-'} ～ ${tournament.endDate || '-'}` : '日程未設定';
-      $('selectedTournamentMeta').textContent = `${tournament.venue || '-'} / ${Number(tournament.roundCount || 1)}R / ${dates}`;
-      const settings = tournament.pairingSettings || {};
+      $('selectedTournamentMeta').textContent = `${tournament.venue || '-'} / Round ${selectedRound()} / ${Number(tournament.roundCount || 1)} / ${dates}`;
+      const settings = tournament.roundPairingSettings?.[String(selectedRound())] || tournament.pairingSettings || {};
       $('playersPerGroup').value = String(settings.playersPerGroup || 3);
       $('startMode').value = settings.startMode || 'out';
       $('topStartTime').value = settings.topStartTime || '08:00';
@@ -273,8 +320,25 @@
         renderPairingsWorkspace();
         return;
       }
-      appState.pairingsUnsubscribe = ref.onSnapshot(snapshot => {
-        appState.pairings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort(groupSort);
+      const requestedTournamentId = appState.selectedTournamentId;
+      const requestedRound = selectedRound();
+      appState.pairingsUnsubscribe = ref.onSnapshot(async snapshot => {
+        if (requestedTournamentId !== appState.selectedTournamentId || requestedRound !== selectedRound()) return;
+        if (!snapshot.empty) {
+          appState.pairingSource = 'round';
+          appState.pairings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort(groupSort);
+          renderPairingsWorkspace();
+          return;
+        }
+        if (requestedRound === 1) {
+          const legacySnapshot = await legacyPairingsRef().get();
+          if (requestedTournamentId !== appState.selectedTournamentId || requestedRound !== selectedRound()) return;
+          appState.pairingSource = legacySnapshot.empty ? 'round' : 'legacy';
+          appState.pairings = legacySnapshot.docs.map(doc => ({ id: doc.id, round: 1, ...doc.data() })).sort(groupSort);
+        } else {
+          appState.pairingSource = 'round';
+          appState.pairings = [];
+        }
         renderPairingsWorkspace();
       }, error => PGAPlatform.showToast('組合せの読み込みに失敗しました: ' + (error.message || error.code)));
     }
@@ -364,7 +428,7 @@
     function renderPairingsWorkspace() {
       const confirmed = confirmedEntries().length;
       const assigned = pairingPlayerIds().size;
-      $('pairingCountLabel').textContent = `${appState.pairings.length}組`;
+      $('pairingCountLabel').textContent = `Round ${selectedRound()} / ${appState.pairings.length}組`;
       $('pairingStatusLabel').textContent = `確定出場者 ${confirmed}名 / 割当 ${assigned}名`;
       renderUnassignedPlayers();
       renderPairings();
@@ -372,18 +436,34 @@
 
     function groupData(group, overrides = {}) {
       const groupId = Number(overrides.groupId ?? group.groupId);
+      const players = overrides.players ?? group.players ?? [];
       return {
+        round: selectedRound(),
         groupId,
         groupName: overrides.groupName ?? group.groupName ?? `第${groupId}組`,
         startHole: Number(overrides.startHole ?? group.startHole ?? 1),
         startTime: overrides.startTime ?? group.startTime ?? '',
-        players: (overrides.players ?? group.players ?? []).map(player => ({ playerId: player.playerId, playerName: player.playerName })),
+        players: players.map((player, index) => {
+          const entry = entryForPlayer(player.playerId);
+          return {
+            playerId: player.playerId,
+            playerName: player.playerName,
+            affiliation: player.affiliation || entry?.affiliation || '',
+            order: index + 1
+          };
+        }),
         updatedAt: PGAPlatform.serverTimestamp()
       };
     }
 
     function rowElement(attribute, key) {
       return Array.from(document.querySelectorAll(`[${attribute}]`)).find(element => element.getAttribute(attribute) === key);
+    }
+
+    async function ensureRoundPairingsMaterialized() {
+      if (appState.pairingSource !== 'legacy') return;
+      await replacePairings(appState.pairings);
+      appState.pairingSource = 'round';
     }
 
     async function saveGroup(groupDocId) {
@@ -401,6 +481,7 @@
         startHole: Number(rowElement('data-group-hole', groupDocId)?.value || 1)
       });
       try {
+        await ensureRoundPairingsMaterialized();
         if (nextDocId === groupDocId) {
           await ref.doc(groupDocId).set(payload, { merge: true });
         } else {
@@ -423,6 +504,7 @@
       if ((group.players || []).length) return PGAPlatform.showToast('選手を他の組へ移動してから組を削除してください。');
       if (!window.confirm(`${group.groupName || `第${group.groupId}組`} を削除しますか？`)) return;
       try {
+        await ensureRoundPairingsMaterialized();
         await ref.doc(groupDocId).delete();
         PGAPlatform.showToast('組を削除しました。');
       } catch (error) {
@@ -441,6 +523,7 @@
       if (!player) return;
       if ((target.players || []).some(item => item.playerId === playerId)) return PGAPlatform.showToast('この選手は移動先の組に登録されています。');
       try {
+        await ensureRoundPairingsMaterialized();
         const batch = PGAPlatform.db().batch();
         batch.set(ref.doc(source.id), groupData(source, { players: (source.players || []).filter(item => item.playerId !== playerId) }), { merge: true });
         batch.set(ref.doc(target.id), groupData(target, { players: [...(target.players || []), player] }), { merge: true });
@@ -460,6 +543,7 @@
       const player = { playerId: entry.playerId || entry.id, playerName: entry.playerName || '' };
       if ((target.players || []).some(item => item.playerId === player.playerId)) return PGAPlatform.showToast('この選手はすでに組へ割り当てられています。');
       try {
+        await ensureRoundPairingsMaterialized();
         await ref.doc(target.id).set(groupData(target, { players: [...(target.players || []), player] }), { merge: true });
         PGAPlatform.showToast('選手を組へ追加しました。');
       } catch (error) {
@@ -493,12 +577,113 @@
       });
     }
 
+    async function loadRoundGroups(round) {
+      const root = tournamentRef();
+      if (!root) return [];
+      const snapshot = await root.collection('round_pairings').doc(String(round)).collection('groups').get();
+      if (!snapshot.empty) return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort(groupSort);
+      if (Number(round) === 1) {
+        const legacy = await root.collection('pairings').get();
+        return legacy.docs.map(doc => ({ id: doc.id, round: 1, ...doc.data() })).sort(groupSort);
+      }
+      return [];
+    }
+
+    function previousRoundGroups(groups, swapHoles) {
+      return groups.map(group => ({
+        id: String(group.groupId),
+        round: selectedRound(),
+        groupId: Number(group.groupId),
+        groupName: group.groupName || `第${group.groupId}組`,
+        startHole: swapHoles ? (Number(group.startHole) === 10 ? 1 : 10) : (Number(group.startHole) === 10 ? 10 : 1),
+        startTime: group.startTime || '08:00',
+        players: (group.players || []).slice().sort((left, right) => Number(left.order || 999) - Number(right.order || 999))
+          .map(player => ({ playerId: player.playerId, playerName: player.playerName, affiliation: player.affiliation || '' }))
+      }));
+    }
+
+    function scoreMapForRound(player, round) {
+      const key = String(round);
+      if (player?.rounds?.[key]?.scores && typeof player.rounds[key].scores === 'object') return player.rounds[key].scores;
+      if (Number(round) === 1 && player?.scores && typeof player.scores === 'object') return player.scores;
+      return {};
+    }
+
+    function totalStrokesThroughRound(player, throughRound) {
+      let total = 0;
+      let holes = 0;
+      for (let round = 1; round <= throughRound; round += 1) {
+        Object.values(scoreMapForRound(player, round)).forEach(value => {
+          const score = Number(value);
+          if (Number.isFinite(score)) {
+            total += score;
+            holes += 1;
+          }
+        });
+      }
+      return holes ? total : Number.POSITIVE_INFINITY;
+    }
+
+    function scoreStatusExcluded(status) {
+      return ['withdrawn', 'wd', 'dns', 'cut'].includes(String(status || '').trim().toLowerCase());
+    }
+
+    async function scoreSortedEntries() {
+      const tournament = selectedTournament();
+      const scoreTournamentId = tournament?.scoreTournamentId || appState.selectedTournamentId;
+      const snapshot = await PGAPlatform.db().collection('tournaments').doc(scoreTournamentId).get();
+      if (!snapshot.exists || !snapshot.data()?.state) throw new Error('スコアシステムの大会データがありません。');
+      const state = snapshot.data().state;
+      const statePlayers = new Map();
+      (state.groups || []).forEach(group => {
+        (group.players || []).forEach(player => {
+          if (!statePlayers.has(player.id)) statePlayers.set(player.id, player);
+        });
+      });
+      (state.playerArchive || []).forEach(player => {
+        if (!statePlayers.has(player.id)) statePlayers.set(player.id, player);
+      });
+      const throughRound = Math.max(1, selectedRound() - 1);
+      return confirmedEntries().map(entry => {
+        const playerId = entry.playerId || entry.id;
+        const scorePlayer = statePlayers.get(playerId);
+        return {
+          ...entry,
+          playerId,
+          scorePlayer,
+          totalStrokes: scorePlayer ? totalStrokesThroughRound(scorePlayer, throughRound) : Number.POSITIVE_INFINITY
+        };
+      }).filter(entry => !scoreStatusExcluded(entry.scorePlayer?.status))
+        .sort((left, right) => {
+          if (left.totalStrokes !== right.totalStrokes) return right.totalStrokes - left.totalStrokes;
+          return String(left.playerName || '').localeCompare(String(right.playerName || ''), 'ja');
+        });
+    }
+
+    function scoreOrderGroups(entries, settings) {
+      const schedules = automaticGroups(entries, settings).map(group => ({ ...group, players: [] }));
+      if (!schedules.length) return schedules;
+      const outGroups = schedules.filter(group => Number(group.startHole) === 1);
+      const finalOut = outGroups[outGroups.length - 1] || schedules[schedules.length - 1];
+      const assignmentOrder = schedules.filter(group => group !== finalOut).concat(finalOut);
+      let cursor = 0;
+      assignmentOrder.forEach(group => {
+        group.players = entries.slice(cursor, cursor + settings.playersPerGroup)
+          .map(entry => ({ playerId: entry.playerId || entry.id, playerName: entry.playerName || '', affiliation: entry.affiliation || '' }));
+        cursor += settings.playersPerGroup;
+      });
+      return schedules.sort(groupSort);
+    }
+
     async function savePairingSettings(silent = false) {
       const ref = tournamentRef();
       if (!ref) return PGAPlatform.showToast('大会を選択してください。');
       try {
         const settings = readSettings();
-        await ref.set({ pairingSettings: { ...settings, updatedAt: PGAPlatform.serverTimestamp() } }, { merge: true });
+        const savedSettings = { ...settings, updatedAt: PGAPlatform.serverTimestamp() };
+        const payload = { roundPairingSettings: { [String(selectedRound())]: savedSettings } };
+        if (selectedRound() === 1) payload.pairingSettings = savedSettings;
+        await ref.set(payload, { merge: true });
         if (!silent) PGAPlatform.showToast('組設定を保存しました。');
         return settings;
       } catch (error) {
@@ -540,7 +725,17 @@
       if (appState.pairings.length && !window.confirm('既存の組合せを置き換えて自動生成しますか？')) return;
       try {
         const settings = await savePairingSettings(true);
-        const groups = automaticGroups(entries, settings);
+        const pattern = $('creationPattern').value;
+        let groups = [];
+        if (pattern === 'normal') {
+          groups = automaticGroups(entries, settings);
+        } else if (pattern === 'same' || pattern === 'swap') {
+          const previous = await loadRoundGroups(selectedRound() - 1);
+          if (!previous.length) throw new Error('前ラウンドの組合せがありません。');
+          groups = previousRoundGroups(previous, pattern === 'swap');
+        } else if (pattern === 'score') {
+          groups = scoreOrderGroups(await scoreSortedEntries(), settings);
+        }
         await replacePairings(groups);
         PGAPlatform.showToast(`${groups.length}組を自動生成しました。`);
       } catch (error) {
@@ -548,10 +743,58 @@
       }
     }
 
+    function existingScorePlayers(state) {
+      const players = new Map();
+      (state?.groups || []).forEach(group => (group.players || []).forEach(player => players.set(player.id, player)));
+      (state?.playerArchive || []).forEach(player => {
+        if (!players.has(player.id)) players.set(player.id, player);
+      });
+      return players;
+    }
+
+    async function applyRoundToScoreSystem() {
+      if (!appState.selectedTournamentId || !appState.pairings.length) return PGAPlatform.showToast('反映する組合せがありません。');
+      const tournament = selectedTournament();
+      const scoreTournamentId = tournament?.scoreTournamentId || appState.selectedTournamentId;
+      if (!window.confirm(`Round ${selectedRound()} の組合せを tournaments/${scoreTournamentId} に反映しますか？`)) return;
+      try {
+        const ref = PGAPlatform.db().collection('tournaments').doc(scoreTournamentId);
+        const snapshot = await ref.get();
+        if (!snapshot.exists || !snapshot.data()?.state) throw new Error('先に tournament_build.html で大会を生成してください。');
+        const state = PGAPlatform.clonePlain(snapshot.data().state);
+        const existingPlayers = existingScorePlayers(state);
+        const roundCount = Math.max(selectedRound(), Number(tournament?.roundCount || state.roundCount || 1));
+        const groups = PGAPlatform.scoreGroupsFromPairings(appState.pairings, {
+          round: selectedRound(),
+          roundCount,
+          existingPlayers
+        });
+        const activeIds = new Set(groups.flatMap(group => group.players.map(player => player.id)));
+        state.playerArchive = [...existingPlayers.values()].filter(player => !activeIds.has(player.id)).map(player => PGAPlatform.clonePlain(player));
+        state.groups = groups;
+        state.roundCount = Math.min(4, roundCount);
+        state.currentRound = selectedRound();
+        state.roundPairings = { ...(state.roundPairings || {}), [String(selectedRound())]: PGAPlatform.pairingSnapshot(appState.pairings, selectedRound()) };
+        state.selectedGroupId = groups[0]?.id || 1;
+        state.selectedHole = groups[0]?.startHole || 1;
+        await ref.set({
+          state,
+          updatedAt: new Date().toISOString(),
+          source: 'platform-v17.0-phase4b-round-apply',
+          masterTournamentId: appState.selectedTournamentId
+        }, { merge: true });
+        await tournamentRef().set({ scoreTournamentId, updatedAt: PGAPlatform.serverTimestamp() }, { merge: true });
+        PGAPlatform.showToast(`Round ${selectedRound()} をスコアシステムへ反映しました。`);
+      } catch (error) {
+        PGAPlatform.showToast('Round反映に失敗しました: ' + (error.message || error.code));
+      }
+    }
+
     async function addGroup() {
       const ref = pairingsRef();
       if (!ref) return PGAPlatform.showToast('大会を選択してください。');
       try {
+        await ensureRoundPairingsMaterialized();
         const settings = readSettings();
         const groupId = Math.max(0, ...appState.pairings.map(group => Number(group.groupId || 0))) + 1;
         const startHole = settings.startMode === 'in' ? 10 : 1;
@@ -657,8 +900,15 @@
         subscribeEntries();
         subscribePairings();
       });
+      $('targetRound').addEventListener('change', () => {
+        syncCreationPattern();
+        renderSelectedTournamentMeta();
+        subscribePairings();
+      });
+      $('creationPattern').addEventListener('change', syncCreationPattern);
       $('savePairingSettingsBtn').onclick = () => savePairingSettings();
       $('autoGenerateBtn').onclick = autoGeneratePairings;
+      $('applyRoundToScoreBtn').onclick = applyRoundToScoreSystem;
       $('addGroupBtn').onclick = addGroup;
       $('reloadPairingsBtn').onclick = () => { subscribeEntries(); subscribePairings(); PGAPlatform.showToast('組合せを再読込しました。'); };
       $('importPairingsCsvBtn').onclick = () => $('pairingsCsvFileInput').click();

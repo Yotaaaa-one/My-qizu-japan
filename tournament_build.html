@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>スコアシステム生成 v17.0 Phase 4-B</title>
+  <link rel="stylesheet" href="./platform-admin-v17.0.css">
+</head>
+<body class="platform-admin">
+  <div class="adminShell">
+    <aside class="adminSidebar">
+      <div class="adminBrand"><strong>PGA Tournament Platform</strong><span>v17.0 Phase 4-B</span></div>
+      <nav class="adminNav">
+        <a href="./admin.html">管理トップ</a>
+        <a href="./players_admin.html">選手マスター</a>
+        <a href="./tournaments_admin.html">大会マスター</a>
+        <a href="./entries_admin.html">出場者管理</a>
+        <a href="./pairings_admin.html">組合せ管理</a>
+        <a class="active" href="./tournament_build.html">スコア生成</a>
+      </nav>
+    </aside>
+
+    <main class="adminMain">
+      <header class="adminTopbar">
+        <div class="adminTitle"><h1>スコアシステム生成</h1><p>Round 1 pairings → tournaments/{大会ID}.state</p></div>
+        <div class="adminUser">
+          <span data-auth-email>認証確認中</span><span class="badge" data-auth-role>login</span>
+          <button class="btn secondary" data-platform-logout>ログアウト</button>
+        </div>
+      </header>
+
+      <section class="adminPanel">
+        <div class="panelHeader"><h2>大会選択</h2><span id="buildTournamentMeta" class="smallText">大会を選択してください。</span></div>
+        <div class="formGrid three">
+          <div class="field"><label for="buildYearFilter">年度</label><select id="buildYearFilter"></select></div>
+          <div class="field"><label for="buildTournamentSelect">大会</label><select id="buildTournamentSelect"></select></div>
+          <div class="field"><label for="scoreTournamentId">生成先 大会ID</label><input id="scoreTournamentId" autocomplete="off"></div>
+          <div class="field"><label>&nbsp;</label><button id="buildTournamentBtn" class="btn" type="button">Round 1から生成</button></div>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="toolbar">
+          <div><strong id="buildPairingCount">0組</strong><span id="buildPlayerCount" class="smallText">0名</span></div>
+          <button id="reloadBuildPreviewBtn" class="btn ghost" type="button">再読込</button>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="tableWrap">
+          <table class="adminTable">
+            <thead><tr><th>組番号</th><th>スタート時間</th><th>スタートホール</th><th>選手</th></tr></thead>
+            <tbody id="buildPreviewBody"><tr><td colspan="4" class="tableEmpty">大会選択後に読み込みます。</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="./platform-core-v17.0.js"></script>
+  <script>
+    const BUILD_SELECTED_KEY = 'pga_platform_build_tournament_v17';
+    const appState = {
+      tournaments: [],
+      selectedTournamentId: '',
+      roundOnePairings: [],
+      entries: [],
+      yearInitialized: false,
+      tournamentsUnsubscribe: null
+    };
+    const $ = id => document.getElementById(id);
+
+    function selectedTournament() {
+      return appState.tournaments.find(tournament => tournament.id === appState.selectedTournamentId) || null;
+    }
+
+    function masterRef() {
+      return appState.selectedTournamentId ? PGAPlatform.db().collection('tournaments_master').doc(appState.selectedTournamentId) : null;
+    }
+
+    function safeTournamentId(value) {
+      return String(value || '').trim().replace(/[\/#?\[\]]/g, '_').replace(/\s+/g, '_').slice(0, 120);
+    }
+
+    function renderYearFilter() {
+      const select = $('buildYearFilter');
+      const years = [...new Set(appState.tournaments.map(tournament => Number(tournament.year || 0)).filter(Boolean))].sort((left, right) => right - left);
+      const previous = select.value;
+      select.innerHTML = ['<option value="">全年度</option>', ...years.map(year => `<option value="${year}">${year}年度</option>`)].join('');
+      const keep = appState.yearInitialized && (previous === '' || years.includes(Number(previous)));
+      select.value = keep ? previous : (years[0] ? String(years[0]) : '');
+      appState.yearInitialized = true;
+    }
+
+    function visibleTournaments() {
+      const year = $('buildYearFilter').value;
+      return appState.tournaments.filter(tournament => !year || Number(tournament.year || 0) === Number(year));
+    }
+
+    function renderTournamentSelect() {
+      const select = $('buildTournamentSelect');
+      const tournaments = visibleTournaments();
+      if (!tournaments.length) {
+        select.innerHTML = '<option value="">該当する大会がありません</option>';
+        appState.selectedTournamentId = '';
+        renderMeta();
+        return;
+      }
+      const saved = localStorage.getItem(BUILD_SELECTED_KEY);
+      if (!appState.selectedTournamentId || !tournaments.some(tournament => tournament.id === appState.selectedTournamentId)) {
+        appState.selectedTournamentId = tournaments.some(tournament => tournament.id === saved) ? saved : tournaments[0].id;
+      }
+      select.innerHTML = tournaments.map(tournament => `<option value="${tournament.id}">${PGAPlatform.escapeHtml(`${tournament.year || ''} ${tournament.name || ''}`)}</option>`).join('');
+      select.value = appState.selectedTournamentId;
+      renderMeta();
+    }
+
+    function renderMeta() {
+      const tournament = selectedTournament();
+      if (!tournament) {
+        $('buildTournamentMeta').textContent = '大会を選択してください。';
+        $('scoreTournamentId').value = '';
+        return;
+      }
+      $('buildTournamentMeta').textContent = `${tournament.venue || '-'} / ${Number(tournament.roundCount || 1)}R / ${tournament.startDate || '-'} ～ ${tournament.endDate || '-'}`;
+      $('scoreTournamentId').value = tournament.scoreTournamentId || tournament.id;
+    }
+
+    function subscribeTournaments() {
+      if (appState.tournamentsUnsubscribe) appState.tournamentsUnsubscribe();
+      appState.tournamentsUnsubscribe = PGAPlatform.db().collection('tournaments_master').onSnapshot(snapshot => {
+        appState.tournaments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          .sort((left, right) => Number(right.year || 0) - Number(left.year || 0) || String(left.name || '').localeCompare(String(right.name || ''), 'ja'));
+        renderYearFilter();
+        renderTournamentSelect();
+        loadBuildPreview();
+      }, error => PGAPlatform.showToast('大会一覧の読み込みに失敗しました: ' + (error.message || error.code)));
+    }
+
+    async function roundOneGroups(ref) {
+      const roundSnapshot = await ref.collection('round_pairings').doc('1').collection('groups').get();
+      if (!roundSnapshot.empty) return roundSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const legacySnapshot = await ref.collection('pairings').get();
+      return legacySnapshot.docs.map(doc => ({ id: doc.id, round: 1, ...doc.data() }));
+    }
+
+    function enrichPairings(pairings, entries) {
+      const entryMap = new Map(entries.map(entry => [entry.playerId || entry.id, entry]));
+      return pairings.slice().sort((left, right) => Number(left.groupId || left.id || 0) - Number(right.groupId || right.id || 0)).map(group => ({
+        ...group,
+        round: 1,
+        players: (group.players || []).map((player, index) => {
+          const entry = entryMap.get(player.playerId);
+          return {
+            playerId: player.playerId,
+            playerName: player.playerName || entry?.playerName || '',
+            affiliation: player.affiliation || entry?.affiliation || '',
+            order: Number(player.order || index + 1)
+          };
+        })
+      }));
+    }
+
+    async function loadBuildPreview() {
+      const ref = masterRef();
+      if (!ref) {
+        appState.roundOnePairings = [];
+        appState.entries = [];
+        renderPreview();
+        return;
+      }
+      const requestedId = appState.selectedTournamentId;
+      try {
+        const [groups, entriesSnapshot] = await Promise.all([roundOneGroups(ref), ref.collection('entries').get()]);
+        if (requestedId !== appState.selectedTournamentId) return;
+        appState.entries = entriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        appState.roundOnePairings = enrichPairings(groups, appState.entries);
+        renderPreview();
+      } catch (error) {
+        PGAPlatform.showToast('生成プレビューの読み込みに失敗しました: ' + (error.message || error.code));
+      }
+    }
+
+    function renderPreview() {
+      const body = $('buildPreviewBody');
+      const playerCount = appState.roundOnePairings.reduce((sum, group) => sum + (group.players || []).length, 0);
+      $('buildPairingCount').textContent = `${appState.roundOnePairings.length}組`;
+      $('buildPlayerCount').textContent = `${playerCount}名`;
+      if (!appState.roundOnePairings.length) {
+        body.innerHTML = '<tr><td colspan="4" class="tableEmpty">Round 1の組合せがありません。</td></tr>';
+        return;
+      }
+      body.innerHTML = appState.roundOnePairings.map(group => `
+        <tr>
+          <td>${PGAPlatform.escapeHtml(group.groupName || `第${group.groupId}組`)}</td>
+          <td>${PGAPlatform.escapeHtml(group.startTime || '')}</td>
+          <td>${Number(group.startHole) === 10 ? 'IN (10H)' : 'OUT (1H)'}</td>
+          <td>${(group.players || []).map(player => `${PGAPlatform.escapeHtml(player.playerName)}${player.affiliation ? `（${PGAPlatform.escapeHtml(player.affiliation)}）` : ''}`).join(' / ')}</td>
+        </tr>`).join('');
+    }
+
+    async function buildTournament() {
+      const tournament = selectedTournament();
+      const targetId = safeTournamentId($('scoreTournamentId').value);
+      if (!tournament) return PGAPlatform.showToast('大会を選択してください。');
+      if (!targetId) return PGAPlatform.showToast('生成先の大会IDを入力してください。');
+      if (!appState.roundOnePairings.length) return PGAPlatform.showToast('Round 1の組合せがありません。');
+      try {
+        const targetRef = PGAPlatform.db().collection('tournaments').doc(targetId);
+        const existing = await targetRef.get();
+        if (existing.exists && !window.confirm(`tournaments/${targetId} のstateをRound 1初期状態で置き換えますか？`)) return;
+        const state = PGAPlatform.buildInitialScoreState(tournament, appState.roundOnePairings);
+        const now = new Date().toISOString();
+        const payload = {
+          state,
+          updatedAt: now,
+          source: 'platform-v17.0-phase4b-build',
+          masterTournamentId: tournament.id,
+          buildVersion: 'v17.0-phase4b'
+        };
+        if (!existing.exists) payload.createdAt = now;
+        await targetRef.set(payload, { merge: true });
+        await masterRef().set({
+          scoreTournamentId: targetId,
+          scoreBuild: { tournamentId: targetId, builtRound: 1, updatedAt: PGAPlatform.serverTimestamp() },
+          updatedAt: PGAPlatform.serverTimestamp()
+        }, { merge: true });
+        PGAPlatform.showToast(`tournaments/${targetId} を生成しました。`);
+      } catch (error) {
+        PGAPlatform.showToast('スコアシステム生成に失敗しました: ' + (error.message || error.code));
+      }
+    }
+
+    function bindEvents() {
+      $('buildYearFilter').addEventListener('change', () => { renderTournamentSelect(); loadBuildPreview(); });
+      $('buildTournamentSelect').addEventListener('change', () => {
+        appState.selectedTournamentId = $('buildTournamentSelect').value;
+        localStorage.setItem(BUILD_SELECTED_KEY, appState.selectedTournamentId);
+        renderMeta();
+        loadBuildPreview();
+      });
+      $('reloadBuildPreviewBtn').onclick = loadBuildPreview;
+      $('buildTournamentBtn').onclick = buildTournament;
+    }
+
+    function initBuildPage() {
+      bindEvents();
+      subscribeTournaments();
+      PGAPlatform.bindLogoutButtons();
+    }
+
+    PGAPlatform.requireAuth({ pageName: 'スコアシステム生成', onReady: initBuildPage });
+  </script>
+</body>
+</html>
