@@ -298,6 +298,15 @@ a {
   background: var(--admin-warn);
 }
 
+.btn.danger {
+  color: #fff;
+  background: var(--admin-danger);
+}
+
+.btn.danger:hover {
+  background: #8f1c13;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -348,6 +357,32 @@ a {
   color: #344054;
   background: #f8fafc;
   font-size: 12px;
+  font-weight: 950;
+}
+
+.sortHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.sortHeader:hover,
+.sortHeader.active {
+  color: var(--admin-primary);
+}
+
+.sortIndicator {
+  display: inline-block;
+  width: 12px;
+  color: var(--admin-primary);
   font-weight: 950;
 }
 

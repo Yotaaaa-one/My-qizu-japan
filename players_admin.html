@@ -11,13 +11,13 @@
     <aside class="adminSidebar">
       <div class="adminBrand">
         <strong>PGA Tournament Platform</strong>
-        <span>v17.0 Phase 1</span>
+        <span>v17.0 Phase 3-C</span>
       </div>
       <nav class="adminNav">
         <a href="./admin.html">管理トップ</a>
         <a class="active" href="./players_admin.html">選手マスター</a>
-        <span class="disabledNav">大会マスター <small>準備中</small></span>
-        <span class="disabledNav">出場者管理 <small>準備中</small></span>
+        <a href="./tournaments_admin.html">大会マスター</a>
+        <a href="./entries_admin.html">出場者管理</a>
         <span class="disabledNav">スコア生成 <small>準備中</small></span>
       </nav>
     </aside>
@@ -105,17 +105,17 @@
           <table class="adminTable">
             <thead>
               <tr>
-                <th>氏名</th>
-                <th>フリガナ</th>
-                <th>所属</th>
-                <th>資格区分</th>
-                <th>出場資格年度</th>
-                <th>出場資格</th>
-                <th>予選会ランキング</th>
+                <th><button type="button" class="sortHeader" data-sort-key="name">氏名 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="kana">フリガナ <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="affiliation">所属 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="qualification">資格区分 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="eligibilityYear">出場資格年度 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="hasTourEligibility">出場資格 <span class="sortIndicator"></span></button></th>
+                <th><button type="button" class="sortHeader" data-sort-key="qualifierRank">予選会ランキング <span class="sortIndicator"></span></button></th>
                 <th>生年月日</th>
                 <th>メール</th>
                 <th>電話</th>
-                <th>ステータス</th>
+                <th><button type="button" class="sortHeader" data-sort-key="status">ステータス <span class="sortIndicator"></span></button></th>
                 <th>更新日時</th>
                 <th>操作</th>
               </tr>
@@ -205,7 +205,8 @@
       players: [],
       filtered: [],
       editingId: null,
-      unsubscribe: null
+      unsubscribe: null,
+      sort: { key: 'kana', direction: 'asc' }
     };
 
     const $ = id => document.getElementById(id);
@@ -250,7 +251,43 @@
         if (f.qualifierRankMax && (!rank || rank > Number(f.qualifierRankMax))) return false;
         return true;
       });
+      appState.filtered = sortPlayers(appState.filtered);
       renderPlayers();
+    }
+
+    function sortPlayers(players) {
+      const { key, direction } = appState.sort;
+      const multiplier = direction === 'asc' ? 1 : -1;
+      const numericKeys = new Set(['eligibilityYear', 'qualifierRank']);
+      const labels = {
+        qualification: value => PGAPlatform.qualificationLabel(value),
+        status: value => PGAPlatform.statusLabel(value),
+        hasTourEligibility: value => isTourEligible({ hasTourEligibility: value }) ? 1 : 0
+      };
+      const valueFor = player => labels[key] ? labels[key](player[key]) : player[key];
+      return [...players].sort((left, right) => {
+        const leftValue = valueFor(left);
+        const rightValue = valueFor(right);
+        const leftEmpty = leftValue === '' || leftValue === null || leftValue === undefined;
+        const rightEmpty = rightValue === '' || rightValue === null || rightValue === undefined;
+        if (leftEmpty && rightEmpty) return String(left.kana || left.name || '').localeCompare(String(right.kana || right.name || ''), 'ja');
+        if (leftEmpty) return 1;
+        if (rightEmpty) return -1;
+        const compared = numericKeys.has(key) || key === 'hasTourEligibility'
+          ? Number(leftValue) - Number(rightValue)
+          : String(leftValue).localeCompare(String(rightValue), 'ja');
+        if (compared !== 0) return compared * multiplier;
+        return String(left.kana || left.name || '').localeCompare(String(right.kana || right.name || ''), 'ja');
+      });
+    }
+
+    function renderSortHeaders() {
+      document.querySelectorAll('.sortHeader').forEach(button => {
+        const active = button.dataset.sortKey === appState.sort.key;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-sort', active ? (appState.sort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+        button.querySelector('.sortIndicator').textContent = active ? (appState.sort.direction === 'asc' ? '↑' : '↓') : '';
+      });
     }
 
     function renderPlayers() {
@@ -258,6 +295,7 @@
       if (!body) return;
       $('playerCountLabel').textContent = `${appState.filtered.length}件 / 全${appState.players.length}件`;
       $('playerUpdatedLabel').textContent = `更新 ${new Date().toLocaleTimeString('ja-JP', { hour12: false })}`;
+      renderSortHeaders();
 
       if (!appState.filtered.length) {
         body.innerHTML = '<tr><td colspan="13" class="tableEmpty">該当する選手がいません。</td></tr>';
@@ -367,12 +405,7 @@
     function subscribePlayers() {
       if (appState.unsubscribe) appState.unsubscribe();
       appState.unsubscribe = PGAPlatform.db().collection('players').onSnapshot(snapshot => {
-        appState.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-          .sort((a, b) => {
-            const kana = String(a.kana || '').localeCompare(String(b.kana || ''), 'ja');
-            if (kana !== 0) return kana;
-            return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
-          });
+        appState.players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         applyFilters();
       }, error => {
         console.error('[v17 players] snapshot error', error);
@@ -486,6 +519,16 @@
         subscribePlayers();
         PGAPlatform.showToast('選手一覧を再読込しました。');
       };
+      document.querySelectorAll('.sortHeader').forEach(button => {
+        button.addEventListener('click', () => {
+          const key = button.dataset.sortKey;
+          appState.sort = {
+            key,
+            direction: appState.sort.key === key && appState.sort.direction === 'asc' ? 'desc' : 'asc'
+          };
+          applyFilters();
+        });
+      });
     }
 
     function initPlayersPage() {

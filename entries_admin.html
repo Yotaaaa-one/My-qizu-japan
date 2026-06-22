@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>出場者管理 v17.0 Phase 3-B</title>
+  <title>出場者管理 v17.0 Phase 3-C</title>
   <link rel="stylesheet" href="./platform-admin-v17.0.css">
 </head>
 <body class="platform-admin">
@@ -11,7 +11,7 @@
     <aside class="adminSidebar">
       <div class="adminBrand">
         <strong>PGA Tournament Platform</strong>
-        <span>v17.0 Phase 3-B</span>
+        <span>v17.0 Phase 3-C</span>
       </div>
       <nav class="adminNav">
         <a href="./admin.html">管理トップ</a>
@@ -41,6 +41,14 @@
           <span class="smallText" id="selectedTournamentMeta">大会を選択してください。</span>
         </div>
         <div class="formGrid three">
+          <div class="field">
+            <label for="tournamentYearFilter">年度</label>
+            <select id="tournamentYearFilter"></select>
+          </div>
+          <div class="field">
+            <label for="tournamentNameSearch">大会名検索</label>
+            <input id="tournamentNameSearch" type="search" placeholder="大会名で絞り込み">
+          </div>
           <div class="field">
             <label for="tournamentSelect">大会</label>
             <select id="tournamentSelect"></select>
@@ -91,8 +99,12 @@
             <input id="bulkEligibilityYear" type="number" min="2000" max="2100" placeholder="例: 2026">
           </div>
           <div class="field">
-            <label>出場資格</label>
-            <label class="checkRow"><input id="bulkHasTourEligibility" type="checkbox" checked> 出場資格ありを対象</label>
+            <label for="bulkRegistrationMode">登録方法</label>
+            <select id="bulkRegistrationMode">
+              <option value="eligibility_only">出場資格ありのみ</option>
+              <option value="rank_only">予選会ランキング上限指定</option>
+              <option value="eligibility_or_rank">出場資格あり + 予選会ランキング上限</option>
+            </select>
           </div>
           <div class="field">
             <label for="bulkQualifierRankMax">予選会ランキング</label>
@@ -168,6 +180,7 @@
       entries: [],
       filteredEntries: [],
       selectedTournamentId: '',
+      tournamentYearFilterInitialized: false,
       entriesUnsubscribe: null,
       tournamentsUnsubscribe: null,
       playersUnsubscribe: null
@@ -201,21 +214,41 @@
       return Number(selectedTournament()?.year || 0) || '';
     }
 
+    function renderTournamentYearFilter() {
+      const select = $('tournamentYearFilter');
+      const years = [...new Set(appState.tournaments.map(tournament => Number(tournament.year || 0)).filter(Boolean))].sort((a, b) => b - a);
+      const previous = select.value;
+      select.innerHTML = ['<option value="">全年度</option>', ...years.map(year => `<option value="${year}">${year}年度</option>`)].join('');
+      const keepPrevious = appState.tournamentYearFilterInitialized && (previous === '' || years.includes(Number(previous)));
+      select.value = keepPrevious ? previous : (years[0] ? String(years[0]) : '');
+      appState.tournamentYearFilterInitialized = true;
+    }
+
+    function filteredTournaments() {
+      const year = $('tournamentYearFilter').value;
+      const keyword = PGAPlatform.normalizeText($('tournamentNameSearch').value || '');
+      return appState.tournaments.filter(tournament => {
+        if (year && Number(tournament.year || 0) !== Number(year)) return false;
+        return !keyword || PGAPlatform.normalizeText(tournament.name).includes(keyword);
+      });
+    }
+
     function renderTournamentSelect() {
       const select = $('tournamentSelect');
       if (!select) return;
-      if (!appState.tournaments.length) {
-        select.innerHTML = '<option value="">大会がありません</option>';
+      const visible = filteredTournaments();
+      if (!visible.length) {
+        select.innerHTML = '<option value="">該当する大会がありません</option>';
         appState.selectedTournamentId = '';
         renderSelectedTournamentMeta();
         applyEntryFilters();
         return;
       }
       const saved = localStorage.getItem(SELECTED_TOURNAMENT_KEY);
-      if (!appState.selectedTournamentId || !appState.tournaments.some(tournament => tournament.id === appState.selectedTournamentId)) {
-        appState.selectedTournamentId = appState.tournaments.some(tournament => tournament.id === saved) ? saved : appState.tournaments[0].id;
+      if (!appState.selectedTournamentId || !visible.some(tournament => tournament.id === appState.selectedTournamentId)) {
+        appState.selectedTournamentId = visible.some(tournament => tournament.id === saved) ? saved : visible[0].id;
       }
-      select.innerHTML = appState.tournaments.map(tournament => `<option value="${tournament.id}">${PGAPlatform.escapeHtml(`${tournament.year || ''} ${tournament.name || ''}`)}</option>`).join('');
+      select.innerHTML = visible.map(tournament => `<option value="${tournament.id}">${PGAPlatform.escapeHtml(`${tournament.year || ''} ${tournament.name || ''}`)}</option>`).join('');
       select.value = appState.selectedTournamentId;
       renderSelectedTournamentMeta();
     }
@@ -239,6 +272,7 @@
       appState.tournamentsUnsubscribe = PGAPlatform.db().collection('tournaments_master').onSnapshot(snapshot => {
         appState.tournaments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
           .sort((a, b) => Number(b.year || 0) - Number(a.year || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'ja'));
+        renderTournamentYearFilter();
         renderTournamentSelect();
         subscribeEntries();
       }, error => PGAPlatform.showToast('大会一覧の読み込みに失敗しました: ' + (error.message || error.code)));
@@ -351,6 +385,7 @@
             <button class="btn secondary" data-reject-entry="${entry.id}">却下</button>
             <button class="btn warn" data-withdraw-entry="${entry.id}">欠場</button>
             <button class="btn ghost" data-reserve-entry="${entry.id}">補欠</button>
+            <button class="btn danger" data-delete-entry="${entry.id}">削除</button>
           </div></td>
         </tr>
       `).join('');
@@ -381,6 +416,23 @@
       document.querySelectorAll('[data-reject-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.rejectEntry, { approvalStatus: 'rejected' }, '却下しました。'));
       document.querySelectorAll('[data-withdraw-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.withdrawEntry, { entryStatus: 'withdrawn' }, '欠場にしました。'));
       document.querySelectorAll('[data-reserve-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.reserveEntry, { entryStatus: 'reserve', approvalStatus: 'pending' }, '補欠にしました。'));
+      document.querySelectorAll('[data-delete-entry]').forEach(button => {
+        button.onclick = () => deleteEntry(button.dataset.deleteEntry);
+      });
+    }
+
+    async function deleteEntry(entryId) {
+      const ref = entriesRef();
+      const entry = appState.entries.find(item => item.id === entryId);
+      if (!ref || !entry) return;
+      const name = entry.playerName || 'この選手';
+      if (!window.confirm(`${name} を出場者一覧から完全に削除しますか？\n欠場ではなく、entries の登録を削除します。`)) return;
+      try {
+        await ref.doc(entryId).delete();
+        PGAPlatform.showToast(`${name} を出場者一覧から削除しました。`);
+      } catch (error) {
+        PGAPlatform.showToast('削除に失敗しました: ' + (error.message || error.code));
+      }
     }
 
     function entryDataFromPlayer(player, values = {}) {
@@ -417,14 +469,25 @@
     function bulkCandidates() {
       const year = Number($('bulkEligibilityYear').value || 0);
       const rankMax = Number($('bulkQualifierRankMax').value || 0);
-      const requireEligibility = $('bulkHasTourEligibility').checked;
-      if (!appState.selectedTournamentId || !year || !rankMax) return [];
+      const mode = $('bulkRegistrationMode').value;
+      if (!appState.selectedTournamentId || !year || (mode !== 'eligibility_only' && !rankMax)) return [];
       return appState.players.filter(player => {
         const rank = Number(player.qualifierRank || 0);
-        return Number(player.eligibilityYear || 0) === year
-          && (!requireEligibility || isTourEligible(player.hasTourEligibility))
-          && rank > 0 && rank <= rankMax;
+        if (Number(player.eligibilityYear || 0) !== year) return false;
+        const eligible = isTourEligible(player.hasTourEligibility);
+        const ranked = rank > 0 && rank <= rankMax;
+        if (mode === 'eligibility_only') return eligible;
+        if (mode === 'rank_only') return ranked;
+        return eligible || ranked;
       });
+    }
+
+    function syncBulkRegistrationControls() {
+      const rankRequired = $('bulkRegistrationMode').value !== 'eligibility_only';
+      $('bulkQualifierRankMax').disabled = !rankRequired;
+      $('bulkQualifierRankMax').required = rankRequired;
+      $('bulkQualifierRankMax').placeholder = rankRequired ? '例: 30' : '指定不要';
+      updateBulkRegistrationPreview();
     }
 
     function updateBulkRegistrationPreview() {
@@ -439,8 +502,9 @@
         button.disabled = true;
         return;
       }
-      if (!$('bulkEligibilityYear').value || !$('bulkQualifierRankMax').value) {
-        summary.textContent = '年度と予選会ランキング上限を入力してください。';
+      const needsRank = $('bulkRegistrationMode').value !== 'eligibility_only';
+      if (!$('bulkEligibilityYear').value || (needsRank && !$('bulkQualifierRankMax').value)) {
+        summary.textContent = needsRank ? '年度と予選会ランキング上限を入力してください。' : '年度を入力してください。';
         button.disabled = true;
         return;
       }
@@ -585,21 +649,33 @@
         renderSelectedTournamentMeta();
         subscribeEntries();
       });
+      ['tournamentYearFilter', 'tournamentNameSearch'].forEach(id => {
+        $(id).addEventListener('input', () => {
+          renderTournamentSelect();
+          subscribeEntries();
+        });
+        $(id).addEventListener('change', () => {
+          renderTournamentSelect();
+          subscribeEntries();
+        });
+      });
       ['entrySearch', 'entryStatusFilter', 'approvalStatusFilter'].forEach(id => {
         $(id).addEventListener('input', applyEntryFilters);
         $(id).addEventListener('change', applyEntryFilters);
       });
       $('playerSearch').addEventListener('input', renderPlayerSelect);
-      ['bulkEligibilityYear', 'bulkQualifierRankMax', 'bulkHasTourEligibility'].forEach(id => {
+      ['bulkEligibilityYear', 'bulkQualifierRankMax'].forEach(id => {
         $(id).addEventListener('input', updateBulkRegistrationPreview);
         $(id).addEventListener('change', updateBulkRegistrationPreview);
       });
+      $('bulkRegistrationMode').addEventListener('change', syncBulkRegistrationControls);
       $('addEntryBtn').onclick = addSelectedPlayer;
       $('bulkRegisterBtn').onclick = bulkRegisterEntries;
       $('reloadEntriesBtn').onclick = () => subscribeEntries();
       $('importEntriesCsvBtn').onclick = () => $('entriesCsvFileInput').click();
       $('entriesCsvFileInput').onchange = event => importEntriesCsv(event.target.files?.[0]);
       $('exportEntriesCsvBtn').onclick = exportEntriesCsv;
+      syncBulkRegistrationControls();
     }
 
     function initEntriesPage() {
