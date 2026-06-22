@@ -16,6 +16,9 @@
     'kana',
     'affiliation',
     'qualification',
+    'eligibilityYear',
+    'hasTourEligibility',
+    'qualifierRank',
     'birthDate',
     'email',
     'phone',
@@ -353,12 +356,17 @@
 
   function normalizePlayerRecord(record) {
     const status = firstValue(record, ['status', 'ステータス']) || 'active';
+    const eligibility = firstValue(record, ['hasTourEligibility', '出場資格', '出場資格有無']);
+    const hasTourEligibility = eligibility === '' ? null : ['true', '1', 'yes', 'y', '有', 'あり', '対象'].includes(String(eligibility).trim().toLowerCase());
     return {
       playerId: firstValue(record, ['playerId', 'id', 'ID', '選手ID']),
       name: firstValue(record, ['name', '氏名', '名前']),
       kana: firstValue(record, ['kana', 'フリガナ', 'ふりがな']),
       affiliation: firstValue(record, ['affiliation', '所属']),
       qualification: firstValue(record, ['qualification', '資格区分']),
+      eligibilityYear: firstValue(record, ['eligibilityYear', '出場資格年度']),
+      hasTourEligibility,
+      qualifierRank: firstValue(record, ['qualifierRank', '予選会ランキング', '予選会順位']),
       birthDate: firstValue(record, ['birthDate', '生年月日']),
       email: firstValue(record, ['email', 'メールアドレス', 'メール']),
       phone: firstValue(record, ['phone', '電話番号', '電話']),

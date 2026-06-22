@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>出場者管理 v17.0 Phase 3</title>
+  <title>出場者管理 v17.0 Phase 3-B</title>
   <link rel="stylesheet" href="./platform-admin-v17.0.css">
 </head>
 <body class="platform-admin">
@@ -11,7 +11,7 @@
     <aside class="adminSidebar">
       <div class="adminBrand">
         <strong>PGA Tournament Platform</strong>
-        <span>v17.0 Phase 3</span>
+        <span>v17.0 Phase 3-B</span>
       </div>
       <nav class="adminNav">
         <a href="./admin.html">管理トップ</a>
@@ -26,7 +26,7 @@
       <header class="adminTopbar">
         <div class="adminTitle">
           <h1>出場者管理</h1>
-          <p>tournaments_master/{tournamentId}/entries/{playerId} を管理します。</p>
+          <p>tournaments_master/{tournamentId}/entries/{playerId}</p>
         </div>
         <div class="adminUser">
           <span data-auth-email>認証確認中</span>
@@ -47,10 +47,10 @@
           </div>
           <div class="field">
             <label for="entrySearch">検索</label>
-            <input id="entrySearch" type="search" placeholder="氏名・フリガナ・所属・組名">
+            <input id="entrySearch" type="search" placeholder="氏名・フリガナ・所属・資格区分">
           </div>
           <div class="field">
-            <label for="entryStatusFilter">出場状態</label>
+            <label for="entryStatusFilter">エントリー状態</label>
             <select id="entryStatusFilter"></select>
           </div>
           <div class="field">
@@ -62,8 +62,7 @@
 
       <section class="adminPanel">
         <div class="panelHeader">
-          <h2>選手マスターから追加</h2>
-          <span class="smallText">players から出場者を追加します。</span>
+          <h2>個別追加</h2>
         </div>
         <div class="formGrid three">
           <div class="field">
@@ -77,6 +76,31 @@
           <div class="field">
             <label>&nbsp;</label>
             <button id="addEntryBtn" class="btn" type="button">出場者に追加</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="adminPanel">
+        <div class="panelHeader">
+          <h2>資格条件で一括登録</h2>
+          <span id="bulkCandidateSummary" class="smallText">大会を選択してください。</span>
+        </div>
+        <div class="formGrid three">
+          <div class="field">
+            <label for="bulkEligibilityYear">大会年度</label>
+            <input id="bulkEligibilityYear" type="number" min="2000" max="2100" placeholder="例: 2026">
+          </div>
+          <div class="field">
+            <label>出場資格</label>
+            <label class="checkRow"><input id="bulkHasTourEligibility" type="checkbox" checked> 出場資格ありを対象</label>
+          </div>
+          <div class="field">
+            <label for="bulkQualifierRankMax">予選会ランキング</label>
+            <input id="bulkQualifierRankMax" type="number" min="1" placeholder="例: 30">
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="bulkRegisterBtn" class="btn" type="button">条件に一致する選手を登録</button>
           </div>
         </div>
       </section>
@@ -101,22 +125,20 @@
           <table class="adminTable">
             <thead>
               <tr>
-                <th>選手</th>
+                <th>氏名</th>
                 <th>所属</th>
-                <th>資格</th>
-                <th>出場状態</th>
+                <th>資格区分</th>
+                <th>出場資格年度</th>
+                <th>出場資格</th>
+                <th>予選会ランキング</th>
+                <th>エントリー状態</th>
                 <th>承認状態</th>
-                <th>補欠順</th>
-                <th>組番号</th>
-                <th>組名</th>
-                <th>スタートH</th>
-                <th>スタート時間</th>
                 <th>更新</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody id="entriesTableBody">
-              <tr><td colspan="12" class="tableEmpty">大会選択後に読み込みます。</td></tr>
+              <tr><td colspan="10" class="tableEmpty">大会選択後に読み込みます。</td></tr>
             </tbody>
           </table>
         </div>
@@ -134,15 +156,12 @@
       { value: 'withdrawn', label: '欠場' },
       { value: 'reserve', label: '補欠' }
     ];
-
     const APPROVAL_STATUSES = [
       { value: 'pending', label: '未承認' },
       { value: 'approved', label: '承認' },
       { value: 'rejected', label: '却下' }
     ];
-
     const SELECTED_TOURNAMENT_KEY = 'pga_platform_selected_tournament_v17';
-
     const appState = {
       tournaments: [],
       players: [],
@@ -153,8 +172,11 @@
       tournamentsUnsubscribe: null,
       playersUnsubscribe: null
     };
-
     const $ = id => document.getElementById(id);
+
+    function isTourEligible(value) {
+      return value === true || ['true', '1', 'yes', '有', 'あり', '対象'].includes(String(value || '').toLowerCase());
+    }
 
     function labelOf(rows, value) {
       return rows.find(row => row.value === value)?.label || value || '未設定';
@@ -167,15 +189,16 @@
     }
 
     function selectedTournament() {
-      return appState.tournaments.find(t => t.id === appState.selectedTournamentId) || null;
+      return appState.tournaments.find(tournament => tournament.id === appState.selectedTournamentId) || null;
     }
 
     function entriesRef() {
       if (!appState.selectedTournamentId) return null;
-      return PGAPlatform.db()
-        .collection('tournaments_master')
-        .doc(appState.selectedTournamentId)
-        .collection('entries');
+      return PGAPlatform.db().collection('tournaments_master').doc(appState.selectedTournamentId).collection('entries');
+    }
+
+    function selectedTournamentYear() {
+      return Number(selectedTournament()?.year || 0) || '';
     }
 
     function renderTournamentSelect() {
@@ -184,15 +207,15 @@
       if (!appState.tournaments.length) {
         select.innerHTML = '<option value="">大会がありません</option>';
         appState.selectedTournamentId = '';
-        $('selectedTournamentMeta').textContent = '大会マスターで大会を作成してください。';
-        renderEntries();
+        renderSelectedTournamentMeta();
+        applyEntryFilters();
         return;
       }
       const saved = localStorage.getItem(SELECTED_TOURNAMENT_KEY);
-      if (!appState.selectedTournamentId) {
-        appState.selectedTournamentId = appState.tournaments.some(t => t.id === saved) ? saved : appState.tournaments[0].id;
+      if (!appState.selectedTournamentId || !appState.tournaments.some(tournament => tournament.id === appState.selectedTournamentId)) {
+        appState.selectedTournamentId = appState.tournaments.some(tournament => tournament.id === saved) ? saved : appState.tournaments[0].id;
       }
-      select.innerHTML = appState.tournaments.map(t => `<option value="${t.id}">${PGAPlatform.escapeHtml((t.year || '') + ' ' + (t.name || ''))}</option>`).join('');
+      select.innerHTML = appState.tournaments.map(tournament => `<option value="${tournament.id}">${PGAPlatform.escapeHtml(`${tournament.year || ''} ${tournament.name || ''}`)}</option>`).join('');
       select.value = appState.selectedTournamentId;
       renderSelectedTournamentMeta();
     }
@@ -201,12 +224,14 @@
       const tournament = selectedTournament();
       if (!tournament) {
         $('selectedTournamentMeta').textContent = '大会を選択してください。';
+        $('bulkEligibilityYear').value = '';
+        updateBulkRegistrationPreview();
         return;
       }
-      const rounds = `${Number(tournament.roundCount || 1)}R`;
-      const venue = tournament.venue || '-';
       const dates = tournament.startDate || tournament.endDate ? `${tournament.startDate || '-'} ～ ${tournament.endDate || '-'}` : '日程未設定';
-      $('selectedTournamentMeta').textContent = `${venue} / ${rounds} / ${dates}`;
+      $('selectedTournamentMeta').textContent = `${tournament.venue || '-'} / ${Number(tournament.roundCount || 1)}R / ${dates}`;
+      $('bulkEligibilityYear').value = selectedTournamentYear();
+      updateBulkRegistrationPreview();
     }
 
     function subscribeTournaments() {
@@ -216,10 +241,7 @@
           .sort((a, b) => Number(b.year || 0) - Number(a.year || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'ja'));
         renderTournamentSelect();
         subscribeEntries();
-      }, error => {
-        console.error('[v17 entries] tournaments snapshot error', error);
-        PGAPlatform.showToast('大会一覧の読み込みに失敗しました: ' + (error.message || error.code));
-      });
+      }, error => PGAPlatform.showToast('大会一覧の読み込みに失敗しました: ' + (error.message || error.code)));
     }
 
     function subscribePlayers() {
@@ -229,10 +251,8 @@
           .filter(player => player.status !== 'inactive' && player.status !== 'suspended')
           .sort((a, b) => String(a.kana || '').localeCompare(String(b.kana || ''), 'ja') || String(a.name || '').localeCompare(String(b.name || ''), 'ja'));
         renderPlayerSelect();
-      }, error => {
-        console.error('[v17 entries] players snapshot error', error);
-        PGAPlatform.showToast('選手一覧の読み込みに失敗しました: ' + (error.message || error.code));
-      });
+        updateBulkRegistrationPreview();
+      }, error => PGAPlatform.showToast('選手一覧の読み込みに失敗しました: ' + (error.message || error.code)));
     }
 
     function subscribeEntries() {
@@ -241,60 +261,51 @@
       if (!ref) {
         appState.entries = [];
         applyEntryFilters();
+        renderPlayerSelect();
+        updateBulkRegistrationPreview();
         return;
       }
       appState.entriesUnsubscribe = ref.onSnapshot(snapshot => {
         appState.entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-          .sort((a, b) => {
-            const groupDiff = Number(a.groupId || 9999) - Number(b.groupId || 9999);
-            if (groupDiff !== 0) return groupDiff;
-            const reserveDiff = Number(a.reserveOrder || 9999) - Number(b.reserveOrder || 9999);
-            if (reserveDiff !== 0) return reserveDiff;
-            return String(a.kana || a.playerName || '').localeCompare(String(b.kana || b.playerName || ''), 'ja');
-          });
+          .sort((a, b) => String(a.kana || a.playerName || '').localeCompare(String(b.kana || b.playerName || ''), 'ja'));
         applyEntryFilters();
         renderPlayerSelect();
+        updateBulkRegistrationPreview();
       }, error => {
-        console.error('[v17 entries] entries snapshot error', error);
-        $('entriesTableBody').innerHTML = `<tr><td colspan="12" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
+        $('entriesTableBody').innerHTML = `<tr><td colspan="10" class="tableEmpty">読み込みエラー: ${PGAPlatform.escapeHtml(error.message || error.code)}</td></tr>`;
       });
     }
 
     function renderPlayerSelect() {
       const select = $('playerSelect');
       if (!select) return;
-      const keyword = PGAPlatform.normalizeText($('playerSearch')?.value || '');
-      const existing = new Set(appState.entries.map(entry => entry.playerId || entry.id));
+      const keyword = PGAPlatform.normalizeText($('playerSearch').value || '');
+      const existingIds = new Set(appState.entries.map(entry => entry.playerId || entry.id));
       const rows = appState.players.filter(player => {
-        if (existing.has(player.id)) return false;
-        if (!keyword) return true;
-        return [player.name, player.kana, player.affiliation].some(value => PGAPlatform.normalizeText(value).includes(keyword));
+        if (existingIds.has(player.id)) return false;
+        return !keyword || [player.name, player.kana, player.affiliation].some(value => PGAPlatform.normalizeText(value).includes(keyword));
       }).slice(0, 250);
-      if (!rows.length) {
-        select.innerHTML = '<option value="">追加できる選手がありません</option>';
-        return;
-      }
-      select.innerHTML = rows.map(player => `<option value="${player.id}">${PGAPlatform.escapeHtml(player.name || '')} / ${PGAPlatform.escapeHtml(player.affiliation || '')}</option>`).join('');
+      select.innerHTML = rows.length
+        ? rows.map(player => `<option value="${player.id}">${PGAPlatform.escapeHtml(player.name || '')} / ${PGAPlatform.escapeHtml(player.affiliation || '')}</option>`).join('')
+        : '<option value="">追加できる選手がありません</option>';
     }
 
     function collectFilters() {
       return {
-        keyword: PGAPlatform.normalizeText($('entrySearch')?.value || ''),
-        entryStatus: $('entryStatusFilter')?.value || '',
-        approvalStatus: $('approvalStatusFilter')?.value || ''
+        keyword: PGAPlatform.normalizeText($('entrySearch').value || ''),
+        entryStatus: $('entryStatusFilter').value || '',
+        approvalStatus: $('approvalStatusFilter').value || ''
       };
     }
 
     function applyEntryFilters() {
-      const f = collectFilters();
+      const filters = collectFilters();
       appState.filteredEntries = appState.entries.filter(entry => {
-        if (f.entryStatus && entry.entryStatus !== f.entryStatus) return false;
-        if (f.approvalStatus && entry.approvalStatus !== f.approvalStatus) return false;
-        if (f.keyword) {
-          const target = [entry.playerName, entry.kana, entry.affiliation, entry.groupName, entry.qualification].map(PGAPlatform.normalizeText).join(' ');
-          if (!target.includes(f.keyword)) return false;
-        }
-        return true;
+        if (filters.entryStatus && entry.entryStatus !== filters.entryStatus) return false;
+        if (filters.approvalStatus && entry.approvalStatus !== filters.approvalStatus) return false;
+        if (!filters.keyword) return true;
+        return [entry.playerName, entry.kana, entry.affiliation, entry.qualification, entry.eligibilityYear, entry.qualifierRank]
+          .map(PGAPlatform.normalizeText).join(' ').includes(filters.keyword);
       });
       renderEntries();
     }
@@ -311,159 +322,164 @@
       return 'badge pending';
     }
 
-    function startHoleOptions(value) {
-      return Array.from({ length: 18 }, (_, i) => i + 1)
-        .map(hole => `<option value="${hole}" ${Number(value || 1) === hole ? 'selected' : ''}>${hole}H</option>`)
-        .join('');
-    }
-
     function renderEntries() {
       const body = $('entriesTableBody');
-      if (!body) return;
       $('entryCountLabel').textContent = `${appState.filteredEntries.length}件 / 全${appState.entries.length}件`;
       $('entryUpdatedLabel').textContent = `更新 ${new Date().toLocaleTimeString('ja-JP', { hour12: false })}`;
-
       if (!appState.selectedTournamentId) {
-        body.innerHTML = '<tr><td colspan="12" class="tableEmpty">大会を選択してください。</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="tableEmpty">大会を選択してください。</td></tr>';
         return;
       }
-
       if (!appState.filteredEntries.length) {
-        body.innerHTML = '<tr><td colspan="12" class="tableEmpty">該当する出場者がいません。</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="tableEmpty">該当する出場者がいません。</td></tr>';
         return;
       }
-
       body.innerHTML = appState.filteredEntries.map(entry => `
         <tr>
-          <td>
-            <strong>${PGAPlatform.escapeHtml(entry.playerName || '')}</strong><br>
-            <span class="smallText">${PGAPlatform.escapeHtml(entry.kana || '')}</span>
-          </td>
+          <td><strong>${PGAPlatform.escapeHtml(entry.playerName || '')}</strong><br><span class="smallText">${PGAPlatform.escapeHtml(entry.kana || '')}</span></td>
           <td>${PGAPlatform.escapeHtml(entry.affiliation || '')}</td>
           <td>${PGAPlatform.escapeHtml(PGAPlatform.qualificationLabel(entry.qualification))}</td>
-          <td>
-            <select data-entry-status="${entry.id}">
-              ${ENTRY_STATUSES.map(row => `<option value="${row.value}" ${row.value === entry.entryStatus ? 'selected' : ''}>${row.label}</option>`).join('')}
-            </select>
-          </td>
-          <td>
-            <select data-approval-status="${entry.id}">
-              ${APPROVAL_STATUSES.map(row => `<option value="${row.value}" ${row.value === entry.approvalStatus ? 'selected' : ''}>${row.label}</option>`).join('')}
-            </select>
-          </td>
-          <td><input data-reserve-order="${entry.id}" type="number" min="1" value="${entry.reserveOrder || ''}" style="width:78px;"></td>
-          <td><input data-group-id="${entry.id}" type="number" min="1" value="${entry.groupId || ''}" style="width:78px;"></td>
-          <td><input data-group-name="${entry.id}" value="${PGAPlatform.escapeHtml(entry.groupName || '')}" style="width:110px;"></td>
-          <td><select data-start-hole="${entry.id}">${startHoleOptions(entry.startHole)}</select></td>
-          <td><input data-planned-start="${entry.id}" type="time" value="${entry.plannedStart || ''}" style="width:100px;"></td>
+          <td>${PGAPlatform.escapeHtml(entry.eligibilityYear || '')}</td>
+          <td><span class="${isTourEligible(entry.hasTourEligibility) ? 'badge' : 'badge disabled'}">${isTourEligible(entry.hasTourEligibility) ? '有' : '無'}</span></td>
+          <td>${PGAPlatform.escapeHtml(entry.qualifierRank || '')}</td>
+          <td><select data-entry-status="${entry.id}">${ENTRY_STATUSES.map(row => `<option value="${row.value}" ${row.value === entry.entryStatus ? 'selected' : ''}>${row.label}</option>`).join('')}</select></td>
+          <td><select data-approval-status="${entry.id}">${APPROVAL_STATUSES.map(row => `<option value="${row.value}" ${row.value === entry.approvalStatus ? 'selected' : ''}>${row.label}</option>`).join('')}</select></td>
           <td>${PGAPlatform.escapeHtml(PGAPlatform.formatDateTime(entry.updatedAt))}</td>
-          <td>
-            <div class="buttonRow">
-              <button class="btn secondary" data-save-entry="${entry.id}">保存</button>
-              <button class="btn ghost" data-approve-entry="${entry.id}">承認</button>
-              <button class="btn secondary" data-reject-entry="${entry.id}">却下</button>
-              <button class="btn warn" data-withdraw-entry="${entry.id}">欠場</button>
-              <button class="btn ghost" data-reserve-entry="${entry.id}">補欠</button>
-            </div>
-          </td>
+          <td><div class="buttonRow">
+            <button class="btn secondary" data-save-entry="${entry.id}">保存</button>
+            <button class="btn ghost" data-approve-entry="${entry.id}">承認</button>
+            <button class="btn secondary" data-reject-entry="${entry.id}">却下</button>
+            <button class="btn warn" data-withdraw-entry="${entry.id}">欠場</button>
+            <button class="btn ghost" data-reserve-entry="${entry.id}">補欠</button>
+          </div></td>
         </tr>
       `).join('');
-
       bindEntryRowButtons();
     }
 
-    function rowInput(selector, id) {
-      return Array.from(document.querySelectorAll(`[${selector}]`)).find(el => el.getAttribute(selector) === id);
-    }
-
-    function rowValue(selector, id) {
-      return rowInput(selector, id)?.value || '';
-    }
-
-    function rowNumber(selector, id) {
-      const value = rowValue(selector, id);
-      return value === '' ? null : Number(value);
+    function rowValue(attribute, entryId) {
+      return Array.from(document.querySelectorAll(`[${attribute}]`)).find(el => el.getAttribute(attribute) === entryId)?.value || '';
     }
 
     async function updateEntry(entryId, patch, message) {
       const ref = entriesRef();
       if (!ref) return;
       try {
-        await ref.doc(entryId).set({
-          ...patch,
-          updatedAt: PGAPlatform.serverTimestamp()
-        }, { merge: true });
+        await ref.doc(entryId).set({ ...patch, updatedAt: PGAPlatform.serverTimestamp() }, { merge: true });
         if (message) PGAPlatform.showToast(message);
       } catch (error) {
         PGAPlatform.showToast('保存に失敗しました: ' + (error.message || error.code));
       }
     }
 
-    function saveEntryFromRow(entryId) {
-      const entryStatus = rowValue('data-entry-status', entryId) || 'entered';
-      const approvalStatus = rowValue('data-approval-status', entryId) || 'pending';
-      updateEntry(entryId, {
-        entryStatus,
-        approvalStatus,
-        reserveOrder: rowNumber('data-reserve-order', entryId),
-        groupId: rowNumber('data-group-id', entryId),
-        groupName: rowValue('data-group-name', entryId),
-        startHole: Number(rowValue('data-start-hole', entryId) || 1),
-        plannedStart: rowValue('data-planned-start', entryId)
-      }, '出場者情報を保存しました。');
+    function bindEntryRowButtons() {
+      document.querySelectorAll('[data-save-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.saveEntry, {
+        entryStatus: rowValue('data-entry-status', button.dataset.saveEntry) || 'entered',
+        approvalStatus: rowValue('data-approval-status', button.dataset.saveEntry) || 'pending'
+      }, '出場者情報を保存しました。'));
+      document.querySelectorAll('[data-approve-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.approveEntry, { approvalStatus: 'approved', entryStatus: 'entered' }, '承認しました。'));
+      document.querySelectorAll('[data-reject-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.rejectEntry, { approvalStatus: 'rejected' }, '却下しました。'));
+      document.querySelectorAll('[data-withdraw-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.withdrawEntry, { entryStatus: 'withdrawn' }, '欠場にしました。'));
+      document.querySelectorAll('[data-reserve-entry]').forEach(button => button.onclick = () => updateEntry(button.dataset.reserveEntry, { entryStatus: 'reserve', approvalStatus: 'pending' }, '補欠にしました。'));
     }
 
-    function bindEntryRowButtons() {
-      document.querySelectorAll('[data-save-entry]').forEach(btn => {
-        btn.onclick = () => saveEntryFromRow(btn.dataset.saveEntry);
-      });
-      document.querySelectorAll('[data-approve-entry]').forEach(btn => {
-        btn.onclick = () => updateEntry(btn.dataset.approveEntry, { approvalStatus: 'approved', entryStatus: 'entered' }, '承認しました。');
-      });
-      document.querySelectorAll('[data-reject-entry]').forEach(btn => {
-        btn.onclick = () => updateEntry(btn.dataset.rejectEntry, { approvalStatus: 'rejected' }, '却下しました。');
-      });
-      document.querySelectorAll('[data-withdraw-entry]').forEach(btn => {
-        btn.onclick = () => updateEntry(btn.dataset.withdrawEntry, { entryStatus: 'withdrawn' }, '欠場にしました。');
-      });
-      document.querySelectorAll('[data-reserve-entry]').forEach(btn => {
-        btn.onclick = () => updateEntry(btn.dataset.reserveEntry, { entryStatus: 'reserve', approvalStatus: 'pending' }, '補欠にしました。');
-      });
+    function entryDataFromPlayer(player, values = {}) {
+      return {
+        playerId: player.id || values.playerId || '',
+        playerName: values.playerName || player.name || '',
+        kana: values.kana || player.kana || '',
+        affiliation: values.affiliation || player.affiliation || '',
+        qualification: values.qualification || player.qualification || '',
+        eligibilityYear: values.eligibilityYear ?? (player.eligibilityYear ? Number(player.eligibilityYear) : null),
+        hasTourEligibility: values.hasTourEligibility ?? isTourEligible(player.hasTourEligibility),
+        qualifierRank: values.qualifierRank ?? (player.qualifierRank ? Number(player.qualifierRank) : null),
+        entryStatus: values.entryStatus || 'entered',
+        approvalStatus: values.approvalStatus || 'pending'
+      };
     }
 
     async function addSelectedPlayer() {
       const ref = entriesRef();
-      const playerId = $('playerSelect')?.value;
-      if (!ref || !appState.selectedTournamentId) {
-        PGAPlatform.showToast('大会を選択してください。');
-        return;
-      }
-      if (!playerId) {
-        PGAPlatform.showToast('追加する選手を選択してください。');
-        return;
-      }
-      const player = appState.players.find(p => p.id === playerId);
-      if (!player) return;
+      const player = appState.players.find(item => item.id === $('playerSelect').value);
+      if (!ref) return PGAPlatform.showToast('大会を選択してください。');
+      if (!player) return PGAPlatform.showToast('追加する選手を選択してください。');
       const docRef = ref.doc(player.id);
-      const exists = await docRef.get().then(snap => snap.exists).catch(() => false);
-      const data = {
-        playerId: player.id,
-        playerName: player.name || '',
-        kana: player.kana || '',
-        affiliation: player.affiliation || '',
-        qualification: player.qualification || '',
-        entryStatus: 'entered',
-        approvalStatus: 'pending',
-        reserveOrder: null,
-        groupId: null,
-        groupName: '',
-        startHole: 1,
-        plannedStart: '',
-        updatedAt: PGAPlatform.serverTimestamp()
-      };
-      if (!exists) data.entryAt = PGAPlatform.serverTimestamp();
-      await docRef.set(data, { merge: true });
-      PGAPlatform.showToast('出場者に追加しました。');
+      try {
+        const exists = await docRef.get().then(snapshot => snapshot.exists);
+        if (exists) return PGAPlatform.showToast('この選手はすでに出場者に登録されています。');
+        await docRef.set({ ...entryDataFromPlayer(player), entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() });
+        PGAPlatform.showToast('出場者に追加しました。');
+      } catch (error) {
+        PGAPlatform.showToast('出場者の追加に失敗しました: ' + (error.message || error.code));
+      }
+    }
+
+    function bulkCandidates() {
+      const year = Number($('bulkEligibilityYear').value || 0);
+      const rankMax = Number($('bulkQualifierRankMax').value || 0);
+      const requireEligibility = $('bulkHasTourEligibility').checked;
+      if (!appState.selectedTournamentId || !year || !rankMax) return [];
+      return appState.players.filter(player => {
+        const rank = Number(player.qualifierRank || 0);
+        return Number(player.eligibilityYear || 0) === year
+          && (!requireEligibility || isTourEligible(player.hasTourEligibility))
+          && rank > 0 && rank <= rankMax;
+      });
+    }
+
+    function updateBulkRegistrationPreview() {
+      const summary = $('bulkCandidateSummary');
+      const button = $('bulkRegisterBtn');
+      const candidates = bulkCandidates();
+      const existingIds = new Set(appState.entries.map(entry => entry.playerId || entry.id));
+      const toAdd = candidates.filter(player => !existingIds.has(player.id));
+      const skipped = candidates.length - toAdd.length;
+      if (!appState.selectedTournamentId) {
+        summary.textContent = '大会を選択してください。';
+        button.disabled = true;
+        return;
+      }
+      if (!$('bulkEligibilityYear').value || !$('bulkQualifierRankMax').value) {
+        summary.textContent = '年度と予選会ランキング上限を入力してください。';
+        button.disabled = true;
+        return;
+      }
+      summary.textContent = `対象 ${candidates.length}名 / 追加予定 ${toAdd.length}名 / 登録済み ${skipped}名`;
+      button.disabled = toAdd.length === 0;
+    }
+
+    async function bulkRegisterEntries() {
+      const ref = entriesRef();
+      const candidates = bulkCandidates();
+      if (!ref || !candidates.length) return PGAPlatform.showToast('登録対象の選手がいません。');
+      const currentSnapshot = await ref.get();
+      const existingIds = new Set(currentSnapshot.docs.map(doc => doc.id));
+      const targets = candidates.filter(player => !existingIds.has(player.id));
+      const skipped = candidates.length - targets.length;
+      if (!targets.length) {
+        updateBulkRegistrationPreview();
+        return PGAPlatform.showToast(`追加対象はありません。${skipped}名はすでに登録済みです。`);
+      }
+      if (!window.confirm(`この条件で一括登録しますか？\n追加: ${targets.length}名\nスキップ: ${skipped}名`)) return;
+      try {
+        let batch = PGAPlatform.db().batch();
+        let pending = 0;
+        const commit = async () => {
+          if (!pending) return;
+          await batch.commit();
+          batch = PGAPlatform.db().batch();
+          pending = 0;
+        };
+        for (const player of targets) {
+          batch.set(ref.doc(player.id), { ...entryDataFromPlayer(player), entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() });
+          pending += 1;
+          if (pending >= 450) await commit();
+        }
+        await commit();
+        PGAPlatform.showToast(`一括登録完了: ${targets.length}名を追加、${skipped}名をスキップしました。`);
+      } catch (error) {
+        PGAPlatform.showToast('一括登録に失敗しました: ' + (error.message || error.code));
+      }
     }
 
     function first(record, keys) {
@@ -475,37 +491,29 @@
 
     function normalizeEntryRecord(record) {
       const player = PGAPlatform.normalizePlayerRecord(record);
+      const eligibility = first(record, ['hasTourEligibility', '出場資格', '出場資格有無']);
       return {
         playerId: player.playerId,
         playerName: first(record, ['playerName', 'name', '氏名', '名前']) || player.name,
         kana: player.kana,
         affiliation: player.affiliation,
         qualification: player.qualification,
-        entryStatus: first(record, ['entryStatus', '出場状態']) || 'entered',
-        approvalStatus: first(record, ['approvalStatus', '承認状態']) || 'pending',
-        reserveOrder: first(record, ['reserveOrder', '補欠順']),
-        groupId: first(record, ['groupId', '組番号']),
-        groupName: first(record, ['groupName', '組名']),
-        startHole: first(record, ['startHole', 'スタートH', 'スタートホール']),
-        plannedStart: first(record, ['plannedStart', 'スタート時間'])
+        eligibilityYear: player.eligibilityYear,
+        hasTourEligibility: eligibility === '' ? undefined : player.hasTourEligibility,
+        qualifierRank: player.qualifierRank,
+        entryStatus: first(record, ['entryStatus', 'エントリー状態', '出場状態']) || 'entered',
+        approvalStatus: first(record, ['approvalStatus', '承認状態']) || 'pending'
       };
     }
 
     async function importEntriesCsv(file) {
       const ref = entriesRef();
-      if (!ref) {
-        PGAPlatform.showToast('大会を選択してください。');
-        return;
-      }
+      if (!ref) return PGAPlatform.showToast('大会を選択してください。');
       if (!file) return;
       try {
         const text = await PGAPlatform.readFileAsText(file);
         const records = PGAPlatform.csvToObjects(text).map(normalizeEntryRecord).filter(row => row.playerName || row.playerId);
-        if (!records.length) {
-          PGAPlatform.showToast('取り込める出場者データがありません。');
-          return;
-        }
-
+        if (!records.length) return PGAPlatform.showToast('取り込める出場者データがありません。');
         let batch = PGAPlatform.db().batch();
         let pending = 0;
         let imported = 0;
@@ -515,29 +523,24 @@
           batch = PGAPlatform.db().batch();
           pending = 0;
         };
-
         for (const row of records) {
-          const master = row.playerId ? appState.players.find(p => p.id === row.playerId) : appState.players.find(p => p.name === row.playerName);
-          const targetId = row.playerId || master?.id || '';
-          const docRef = targetId ? ref.doc(targetId) : ref.doc();
-          const playerId = targetId || docRef.id;
-          const data = {
-            playerId,
-            playerName: row.playerName || master?.name || '',
-            kana: row.kana || master?.kana || '',
-            affiliation: row.affiliation || master?.affiliation || '',
-            qualification: row.qualification || master?.qualification || '',
-            entryStatus: row.entryStatus || 'entered',
-            approvalStatus: row.approvalStatus || 'pending',
-            reserveOrder: row.reserveOrder ? Number(row.reserveOrder) : null,
-            groupId: row.groupId ? Number(row.groupId) : null,
-            groupName: row.groupName || '',
-            startHole: row.startHole ? Number(row.startHole) : 1,
-            plannedStart: row.plannedStart || '',
-            entryAt: PGAPlatform.serverTimestamp(),
-            updatedAt: PGAPlatform.serverTimestamp()
-          };
-          batch.set(docRef, data, { merge: true });
+          const master = row.playerId ? appState.players.find(player => player.id === row.playerId) : appState.players.find(player => player.name === row.playerName);
+          const id = row.playerId || master?.id || '';
+          const docRef = id ? ref.doc(id) : ref.doc();
+          const base = master || { id: id || docRef.id };
+          const data = entryDataFromPlayer(base, {
+            playerId: id || docRef.id,
+            playerName: row.playerName,
+            kana: row.kana,
+            affiliation: row.affiliation,
+            qualification: row.qualification,
+            eligibilityYear: row.eligibilityYear ? Number(row.eligibilityYear) : null,
+            hasTourEligibility: row.hasTourEligibility,
+            qualifierRank: row.qualifierRank ? Number(row.qualifierRank) : null,
+            entryStatus: row.entryStatus,
+            approvalStatus: row.approvalStatus
+          });
+          batch.set(docRef, { ...data, entryAt: PGAPlatform.serverTimestamp(), updatedAt: PGAPlatform.serverTimestamp() }, { merge: true });
           pending += 1;
           imported += 1;
           if (pending >= 450) await commit();
@@ -558,20 +561,17 @@
         kana: entry.kana || '',
         affiliation: entry.affiliation || '',
         qualification: entry.qualification || '',
+        eligibilityYear: entry.eligibilityYear || '',
+        hasTourEligibility: isTourEligible(entry.hasTourEligibility),
+        qualifierRank: entry.qualifierRank || '',
         entryStatus: entry.entryStatus || '',
         approvalStatus: entry.approvalStatus || '',
-        reserveOrder: entry.reserveOrder || '',
-        groupId: entry.groupId || '',
-        groupName: entry.groupName || '',
-        startHole: entry.startHole || '',
-        plannedStart: entry.plannedStart || '',
         entryAt: PGAPlatform.formatDateTime(entry.entryAt),
         updatedAt: PGAPlatform.formatDateTime(entry.updatedAt)
       }));
-      const tournament = selectedTournament();
-      const name = String(tournament?.name || 'entries').replace(/[\\/:*?"<>|]/g, '_');
-      PGAPlatform.downloadText(`entries_${name}.csv`, PGAPlatform.objectsToCsv(rows, [
-        'playerId','playerName','kana','affiliation','qualification','entryStatus','approvalStatus','reserveOrder','groupId','groupName','startHole','plannedStart','entryAt','updatedAt'
+      const tournamentName = String(selectedTournament()?.name || 'entries').replace(/[\\/:*?"<>|]/g, '_');
+      PGAPlatform.downloadText(`entries_${tournamentName}.csv`, PGAPlatform.objectsToCsv(rows, [
+        'playerId', 'playerName', 'kana', 'affiliation', 'qualification', 'eligibilityYear', 'hasTourEligibility', 'qualifierRank', 'entryStatus', 'approvalStatus', 'entryAt', 'updatedAt'
       ]), 'text/csv;charset=utf-8');
       PGAPlatform.showToast('CSVを書き出しました。');
     }
@@ -579,7 +579,6 @@
     function bindEvents() {
       fillSelect($('entryStatusFilter'), ENTRY_STATUSES, 'すべて');
       fillSelect($('approvalStatusFilter'), APPROVAL_STATUSES, 'すべて');
-
       $('tournamentSelect').addEventListener('change', () => {
         appState.selectedTournamentId = $('tournamentSelect').value;
         localStorage.setItem(SELECTED_TOURNAMENT_KEY, appState.selectedTournamentId);
@@ -591,11 +590,13 @@
         $(id).addEventListener('change', applyEntryFilters);
       });
       $('playerSearch').addEventListener('input', renderPlayerSelect);
+      ['bulkEligibilityYear', 'bulkQualifierRankMax', 'bulkHasTourEligibility'].forEach(id => {
+        $(id).addEventListener('input', updateBulkRegistrationPreview);
+        $(id).addEventListener('change', updateBulkRegistrationPreview);
+      });
       $('addEntryBtn').onclick = addSelectedPlayer;
-      $('reloadEntriesBtn').onclick = () => {
-        subscribeEntries();
-        PGAPlatform.showToast('出場者一覧を再読込しました。');
-      };
+      $('bulkRegisterBtn').onclick = bulkRegisterEntries;
+      $('reloadEntriesBtn').onclick = () => subscribeEntries();
       $('importEntriesCsvBtn').onclick = () => $('entriesCsvFileInput').click();
       $('entriesCsvFileInput').onchange = event => importEntriesCsv(event.target.files?.[0]);
       $('exportEntriesCsvBtn').onclick = exportEntriesCsv;
@@ -608,10 +609,7 @@
       PGAPlatform.bindLogoutButtons();
     }
 
-    PGAPlatform.requireAuth({
-      pageName: '出場者管理',
-      onReady: initEntriesPage
-    });
+    PGAPlatform.requireAuth({ pageName: '出場者管理', onReady: initEntriesPage });
   </script>
 </body>
 </html>

@@ -225,6 +225,18 @@ a {
   outline: 3px solid rgba(15, 107, 79, .14);
 }
 
+.inlineFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.inlineFields > span {
+  color: var(--admin-muted);
+  font-weight: 800;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -259,6 +271,11 @@ a {
 
 .btn:hover {
   background: var(--admin-primary-dark);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: .5;
 }
 
 .btn.secondary {
@@ -442,6 +459,21 @@ a {
   color: var(--admin-muted);
   font-size: 12px;
   font-weight: 750;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  gap: 8px;
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.checkRow input {
+  width: 16px;
+  height: 16px;
 }
 
 .hidden {
