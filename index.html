@@ -6730,6 +6730,11 @@ window.addEventListener('load', function(){
 <script id="v170-tournament-code-login">
 (function(){
   function byId(id){ return document.getElementById(id); }
+  function escapeHtml(value){
+    return String(value ?? '').replace(/[&<>"']/g, function(character){
+      return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character];
+    });
+  }
   function normalizeCode(value){
     return String(value || '')
       .replace(/[０-９]/g, function(character){ return String.fromCharCode(character.charCodeAt(0) - 0xFEE0); })
@@ -6827,6 +6832,361 @@ window.addEventListener('load', function(){
   window.addEventListener('DOMContentLoaded', installTournamentCodeLogin);
   window.addEventListener('load', installTournamentCodeLogin);
   setTimeout(installTournamentCodeLogin, 300);
+})();
+</script>
+
+<style id="v170-phase4b-login-flow-style">
+#scorerLoginGate > .row,
+#scorerLoginGate > .utility,
+#scorerLoginGate > .loginDangerText,
+#scorerLoginGate > p.small {
+  display: none !important;
+}
+#v170TournamentCodePanel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #b8c8c1;
+  border-radius: 8px;
+  background: #f3f7f5;
+}
+#v170TournamentCodePanel .v170FlowGrid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+#v170TournamentCodePanel .v170FlowFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+#v170TournamentCodePanel input,
+#v170TournamentCodePanel select {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+#v170TournamentCodePanel input {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+#v170TournamentMeta {
+  margin-top: 12px;
+  padding: 12px;
+  border-left: 4px solid #087a55;
+  background: #fff;
+  line-height: 1.7;
+}
+#v170TournamentCodeStatus {
+  min-height: 22px;
+  margin-top: 9px;
+  font-weight: 800;
+}
+#v170LoginBtn {
+  width: 100%;
+  margin-top: 14px;
+}
+@media (max-width: 620px) {
+  #v170TournamentCodePanel .v170FlowGrid,
+  #v170TournamentCodePanel .v170FlowFields {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+<script id="v170-phase4b-login-flow">
+(function(){
+  const LOCK_KEY = 'pga_score_v1646_device_lock';
+  const FLOW_VERSION = 'v17.0-phase4b-login-flow-fix';
+  const loginContext = {
+    tournamentId: '',
+    tournamentCode: '',
+    tournamentName: '',
+    tournamentState: null,
+    masterId: '',
+    masterData: null,
+    groups: []
+  };
+
+  function byId(id){ return document.getElementById(id); }
+  function escapeHtml(value){
+    return String(value ?? '').replace(/[&<>"']/g, function(character){
+      return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character];
+    });
+  }
+  function normalizeCode(value){
+    return String(value || '')
+      .trim()
+      .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(character){ return String.fromCharCode(character.charCodeAt(0) - 0xFEE0); })
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 6);
+  }
+  function validDocumentId(value){
+    const id = String(value || '').trim();
+    return id && id.length <= 120 && !id.includes('/') ? id : '';
+  }
+  function clampRound(value, roundCount){
+    const round = Math.floor(Number(value || 1));
+    return Math.min(Math.max(round, 1), Math.min(Math.max(Number(roundCount || 1), 1), 4));
+  }
+  function formatDate(value){
+    const text = String(value || '').trim();
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[1]}/${match[2]}/${match[3]}` : text;
+  }
+  function setStatus(message, isError){
+    const status = byId('v170TournamentCodeStatus');
+    if (!status) return;
+    status.textContent = message || '';
+    status.style.color = isError ? '#b42318' : '#14532d';
+  }
+  function setVerifyBusy(busy){
+    const button = byId('v170VerifyCodeBtn');
+    const input = byId('v170TournamentCodeInput');
+    if (button) {
+      button.disabled = busy;
+      button.textContent = busy ? '照合中...' : '大会コードを照合';
+    }
+    if (input) input.disabled = busy;
+  }
+  function database(){
+    if (!window.firebase) throw new Error('Firebase SDKを読み込めませんでした。');
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    return firebase.firestore();
+  }
+  async function loadMaster(db, codeData, tournamentId){
+    const candidates = [codeData.masterTournamentId, tournamentId]
+      .map(validDocumentId)
+      .filter(function(id, index, list){ return id && list.indexOf(id) === index; });
+    for (const masterId of candidates) {
+      try {
+        const snapshot = await db.collection('tournaments_master').doc(masterId).get();
+        if (snapshot.exists) return { id: masterId, data: snapshot.data() || {} };
+      } catch (error) {
+        console.warn('大会マスターの読み込みに失敗しました', masterId, error);
+      }
+    }
+    return { id: candidates[0] || tournamentId, data: null };
+  }
+  function normalizeGroup(source, fallbackId){
+    const groupId = source.groupId ?? source.id ?? fallbackId;
+    const startHole = Number(source.startHole) === 10 ? 10 : 1;
+    return {
+      groupId,
+      groupName: source.groupName || source.name || `第${groupId}組`,
+      startTime: source.startTime || source.plannedStart || '',
+      startHole,
+      players: (Array.isArray(source.players) ? source.players : []).map(function(player, index){
+        return {
+          playerId: player.playerId || player.id || '',
+          playerName: player.playerName || player.name || '',
+          affiliation: player.affiliation || '',
+          order: Number(player.order || index + 1)
+        };
+      })
+    };
+  }
+  function groupLabel(group){
+    const tee = Number(group.startHole) === 10 ? 'IN' : 'OUT';
+    const names = group.players.map(function(player){ return player.playerName; }).filter(Boolean).join('・') || '選手未設定';
+    return `${group.groupName} / ${group.startTime || '--:--'} / ${tee} / ${names}`;
+  }
+  function renderGroups(groups){
+    const select = byId('v170GroupSelect');
+    const button = byId('v170LoginBtn');
+    if (!select) return;
+    select.innerHTML = '';
+    groups.forEach(function(group){
+      const option = document.createElement('option');
+      option.value = String(group.groupId);
+      option.textContent = groupLabel(group);
+      select.appendChild(option);
+    });
+    if (!groups.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'このラウンドの組合せがありません';
+      select.appendChild(option);
+    }
+    if (button) button.disabled = !groups.length;
+  }
+  async function loadGroupsForRound(roundValue){
+    const roundCount = Number(loginContext.tournamentState?.roundCount || loginContext.masterData?.roundCount || 1);
+    const round = clampRound(roundValue, roundCount);
+    const select = byId('v170GroupSelect');
+    const button = byId('v170LoginBtn');
+    if (select) select.innerHTML = '<option value="">組合せを読み込み中...</option>';
+    if (button) button.disabled = true;
+    let groups = [];
+    if (loginContext.masterId) {
+      try {
+        const snapshot = await database()
+          .collection('tournaments_master').doc(loginContext.masterId)
+          .collection('round_pairings').doc(String(round))
+          .collection('groups').get();
+        groups = snapshot.docs.map(function(doc){ return normalizeGroup(doc.data() || {}, doc.id); });
+      } catch (error) {
+        console.warn(`Round ${round} 組合せの読み込みに失敗しました`, error);
+      }
+    }
+    if (!groups.length && round === 1) {
+      groups = (loginContext.tournamentState?.groups || []).map(function(group){ return normalizeGroup(group, group.id); });
+    }
+    groups.sort(function(left, right){ return Number(left.groupId || 0) - Number(right.groupId || 0); });
+    loginContext.groups = groups;
+    renderGroups(groups);
+    if (!groups.length) setStatus(`Round ${round} の組合せが見つかりません。`, true);
+    else setStatus(`Round ${round} の担当組を選択してください。`, false);
+  }
+  function renderTournament(codeData, stateData, masterResult){
+    const roundCount = Math.min(Math.max(Number(stateData.roundCount || masterResult.data?.roundCount || 1), 1), 4);
+    const name = codeData.name || codeData.tournamentName || stateData.tournamentName || masterResult.data?.name || loginContext.tournamentId;
+    const startDate = masterResult.data?.startDate || '';
+    const endDate = masterResult.data?.endDate || '';
+    const dates = startDate || endDate
+      ? `${formatDate(startDate) || '-'} ～ ${formatDate(endDate) || '-'}`
+      : '日程未設定';
+    loginContext.tournamentName = name;
+    loginContext.masterId = masterResult.id;
+    loginContext.masterData = masterResult.data;
+    const meta = byId('v170TournamentMeta');
+    if (meta) meta.innerHTML = `<strong>${escapeHtml(name)}</strong><br><span>${escapeHtml(dates)}</span>`;
+    const roundSelect = byId('v170RoundSelect');
+    if (roundSelect) {
+      roundSelect.innerHTML = Array.from({ length: roundCount }, function(_, index){
+        const round = index + 1;
+        return `<option value="${round}">Round ${round}</option>`;
+      }).join('');
+      const current = clampRound(stateData.currentRound || 1, roundCount);
+      roundSelect.value = String(current);
+    }
+    byId('v170FlowSelection').hidden = false;
+    loadGroupsForRound(roundSelect?.value || 1);
+  }
+  async function verifyCode(event){
+    if (event) event.preventDefault();
+    const input = byId('v170TournamentCodeInput');
+    const code = normalizeCode(input?.value);
+    if (input) input.value = code;
+    byId('v170FlowSelection').hidden = true;
+    loginContext.groups = [];
+    if (!/^[A-Z0-9]{4,6}$/.test(code)) {
+      setStatus('大会コードを英数字4〜6文字で入力してください。', true);
+      return;
+    }
+    setVerifyBusy(true);
+    setStatus('大会情報を取得しています。', false);
+    try {
+      const db = database();
+      const codeSnapshot = await db.collection('tournamentCodes').doc(code).get();
+      if (!codeSnapshot.exists) throw new Error('大会コードが見つかりません。');
+      const codeData = codeSnapshot.data() || {};
+      if (codeData.active !== true) throw new Error('この大会コードは無効です。');
+      const tournamentId = validDocumentId(codeData.tournamentId);
+      if (!tournamentId) throw new Error('大会コードの tournamentId が不正です。');
+      const tournamentSnapshot = await db.collection('tournaments').doc(tournamentId).get();
+      const stateData = tournamentSnapshot.exists ? tournamentSnapshot.data()?.state : null;
+      if (!stateData || !Array.isArray(stateData.groups)) throw new Error('大会スコアデータが生成されていません。');
+      const masterResult = await loadMaster(db, codeData, tournamentId);
+      loginContext.tournamentId = tournamentId;
+      loginContext.tournamentCode = code;
+      loginContext.tournamentState = stateData;
+      renderTournament(codeData, stateData, masterResult);
+      setStatus('大会を確認しました。ラウンドと担当組を選択してください。', false);
+    } catch (error) {
+      console.warn('大会コード照合に失敗しました', error);
+      setStatus(error.message || '大会コードを確認できませんでした。', true);
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
+  function loginToScorer(){
+    const roundCount = Number(loginContext.tournamentState?.roundCount || loginContext.masterData?.roundCount || 1);
+    const round = clampRound(byId('v170RoundSelect')?.value, roundCount);
+    const groupId = byId('v170GroupSelect')?.value;
+    const group = loginContext.groups.find(function(item){ return String(item.groupId) === String(groupId); });
+    if (!loginContext.tournamentId || !group) {
+      setStatus('大会コードを照合し、担当組を選択してください。', true);
+      return;
+    }
+    const lockedAt = new Date().toISOString();
+    const lock = {
+      version: FLOW_VERSION,
+      tournamentId: loginContext.tournamentId,
+      tournamentCode: loginContext.tournamentCode,
+      tournamentName: loginContext.tournamentName,
+      round,
+      groupId: group.groupId,
+      groupName: group.groupName,
+      deviceGroupId: group.groupId,
+      selectedGroupId: group.groupId,
+      selectedHole: group.startHole || 1,
+      lockedAt
+    };
+    localStorage.setItem(LOCK_KEY, JSON.stringify(lock));
+    try {
+      if (typeof TOURNAMENT_ID_STORAGE_KEY !== 'undefined') {
+        localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, loginContext.tournamentId);
+      }
+      state = loginContext.tournamentState;
+      state.deviceGroupId = group.groupId;
+      state.selectedGroupId = group.groupId;
+      state.selectedHole = group.startHole || 1;
+      if (typeof STORAGE_KEY !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.warn('端末固定情報の保存に失敗しました', error);
+    }
+    setStatus('ログインしました。スコアラー画面を開きます。', false);
+    const url = new URL('scorer.html', window.location.href);
+    url.searchParams.set('tournament', loginContext.tournamentId);
+    window.location.assign(url.toString());
+  }
+  function installFlow(){
+    const gate = byId('scorerLoginGate');
+    const panel = byId('v170TournamentCodePanel');
+    if (!gate || !panel || panel.dataset.phase4bFlow === '1') return;
+    panel.dataset.phase4bFlow = '1';
+    const description = gate.querySelector(':scope > p.small');
+    if (description) description.textContent = '大会コードを照合し、担当ラウンドと担当組を選択してください。';
+    panel.innerHTML = `
+      <div class="v170FlowGrid">
+        <div class="selectBox">
+          <label for="v170TournamentCodeInput">大会コード</label>
+          <input id="v170TournamentCodeInput" maxlength="6" autocomplete="one-time-code" placeholder="4〜6文字の大会コード">
+        </div>
+        <button class="blue" id="v170VerifyCodeBtn" type="button">大会コードを照合</button>
+      </div>
+      <div id="v170TournamentCodeStatus" role="status" aria-live="polite"></div>
+      <div id="v170FlowSelection" hidden>
+        <div id="v170TournamentMeta"></div>
+        <div class="v170FlowFields">
+          <div class="selectBox">
+            <label for="v170RoundSelect">担当ラウンド</label>
+            <select id="v170RoundSelect"></select>
+          </div>
+          <div class="selectBox">
+            <label for="v170GroupSelect">担当組</label>
+            <select id="v170GroupSelect"></select>
+          </div>
+        </div>
+        <button class="blue" id="v170LoginBtn" type="button" disabled>このラウンド・組でログイン</button>
+      </div>`;
+    const input = byId('v170TournamentCodeInput');
+    input?.addEventListener('input', function(){ this.value = normalizeCode(this.value); });
+    input?.addEventListener('keydown', function(event){ if (event.key === 'Enter') verifyCode(event); });
+    byId('v170VerifyCodeBtn')?.addEventListener('click', verifyCode);
+    byId('v170RoundSelect')?.addEventListener('change', function(){ loadGroupsForRound(this.value); });
+    byId('v170LoginBtn')?.addEventListener('click', loginToScorer);
+  }
+  window.v170Phase4bVerifyCode = verifyCode;
+  window.v170Phase4bLoadGroups = loadGroupsForRound;
+  window.v170Phase4bLogin = loginToScorer;
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(installFlow, 0); });
+  window.addEventListener('load', installFlow);
+  setTimeout(installFlow, 500);
 })();
 </script>
 

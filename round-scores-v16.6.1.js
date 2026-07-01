@@ -27,9 +27,23 @@
     return clamp(state.roundCount || 1, 1, 4);
   }
 
+  function scorerDeviceRound() {
+    try {
+      const page = String(window.location?.pathname || '').split('/').pop().toLowerCase();
+      if (!page.includes('scorer')) return null;
+      const lock = JSON.parse(localStorage.getItem('pga_score_v1646_device_lock') || 'null');
+      if (!lock || !lock.round) return null;
+      const requestedTournament = new URLSearchParams(window.location.search || '').get('tournament');
+      if (requestedTournament && lock.tournamentId && String(requestedTournament) !== String(lock.tournamentId)) return null;
+      return clamp(lock.round, 1, roundCount());
+    } catch (error) {
+      return null;
+    }
+  }
+
   function currentRound() {
     if (!hasState()) return 1;
-    return clamp(state.currentRound || 1, 1, roundCount());
+    return scorerDeviceRound() || clamp(state.currentRound || 1, 1, roundCount());
   }
 
   function roundLabel() {
@@ -93,7 +107,7 @@
   function normalizeRoundScores() {
     if (!hasState()) return;
     state.roundCount = roundCount();
-    state.currentRound = currentRound();
+    if (!scorerDeviceRound()) state.currentRound = currentRound();
     state.selectedHole = clamp(state.selectedHole || 1, 1, HOLES_PER_ROUND);
     state.groups.forEach(group => {
       (group.players || []).forEach(player => syncPlayerAlias(player));
@@ -495,6 +509,7 @@
   window.v1661RoundScores = {
     normalizeRoundScores,
     roundStore,
+    scorerDeviceRound,
     currentRound,
     roundCount,
     totalScoreRoundAware,

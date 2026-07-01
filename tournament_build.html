@@ -35,7 +35,7 @@
           <div class="field"><label for="buildYearFilter">年度</label><select id="buildYearFilter"></select></div>
           <div class="field"><label for="buildTournamentSelect">大会</label><select id="buildTournamentSelect"></select></div>
           <div class="field"><label for="scoreTournamentId">生成先 大会ID</label><input id="scoreTournamentId" autocomplete="off"></div>
-          <div class="field"><label for="scoreTournamentCode">短縮大会コード（数字4〜6桁）</label><input id="scoreTournamentCode" inputmode="numeric" minlength="4" maxlength="6" autocomplete="off" placeholder="例：2710"></div>
+          <div class="field"><label for="scoreTournamentCode">大会コード（英数字4〜6文字）</label><input id="scoreTournamentCode" minlength="4" maxlength="6" autocomplete="off" placeholder="例：260527"></div>
           <div class="field"><label>&nbsp;</label><button id="generateTournamentCodeBtn" class="btn ghost" type="button">コードを自動生成</button></div>
           <div class="field"><label>&nbsp;</label><button id="buildTournamentBtn" class="btn" type="button">Round 1から生成</button></div>
         </div>
@@ -121,8 +121,10 @@
 
     function normalizeTournamentCode(value) {
       return String(value || '')
-        .replace(/[０-９]/g, character => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
-        .replace(/\D/g, '')
+        .trim()
+        .replace(/[Ａ-Ｚａ-ｚ０-９]/g, character => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
         .slice(0, 6);
     }
 
@@ -299,7 +301,7 @@
       const tournamentCode = normalizeTournamentCode($('scoreTournamentCode').value);
       if (!tournament) return PGAPlatform.showToast('大会を選択してください。');
       if (!targetId) return PGAPlatform.showToast('生成先の大会IDは半角英数字、_、-を含めて入力してください。');
-      if (!/^\d{4,6}$/.test(tournamentCode)) return PGAPlatform.showToast('短縮大会コードを数字4〜6桁で入力してください。');
+      if (!/^[A-Z0-9]{4,6}$/.test(tournamentCode)) return PGAPlatform.showToast('大会コードを英数字4〜6文字で入力してください。');
       if (!appState.roundOnePairings.length) return PGAPlatform.showToast('Round 1の組合せがありません。');
       try {
         $('scoreTournamentId').value = targetId;
@@ -346,6 +348,7 @@
         const codePayload = {
           code: tournamentCode,
           tournamentId: targetId,
+          name: state.tournamentName,
           tournamentName: state.tournamentName,
           masterTournamentId: tournament.id,
           active: true,

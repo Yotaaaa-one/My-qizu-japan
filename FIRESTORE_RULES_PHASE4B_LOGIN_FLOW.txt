@@ -1,0 +1,23 @@
+Phase 4-B Login Flow Fix - Firestore Rules 追記例
+
+以下は既存の firestore.rules に統合してください。
+この内容だけで既存ルール全体を置き換えないでください。
+
+match /tournamentCodes/{code} {
+  allow read: if true;
+  allow write: if request.auth != null;
+}
+
+match /tournaments_master/{tournamentId} {
+  allow read: if true;
+  allow write: if request.auth != null;
+
+  match /round_pairings/{roundId}/groups/{groupId} {
+    allow read: if true;
+    allow write: if request.auth != null;
+  }
+}
+
+補足:
+- tournaments/{tournamentId} は既存スコアラー画面が読み書きできる現在のルールを維持してください。
+- 本番運用では write 条件を users/{uid}.role の admin / staff に限定することを推奨します。
