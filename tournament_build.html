@@ -35,6 +35,8 @@
           <div class="field"><label for="buildYearFilter">年度</label><select id="buildYearFilter"></select></div>
           <div class="field"><label for="buildTournamentSelect">大会</label><select id="buildTournamentSelect"></select></div>
           <div class="field"><label for="scoreTournamentId">生成先 大会ID</label><input id="scoreTournamentId" autocomplete="off"></div>
+          <div class="field"><label for="scoreTournamentCode">短縮大会コード（数字4〜6桁）</label><input id="scoreTournamentCode" inputmode="numeric" minlength="4" maxlength="6" autocomplete="off" placeholder="例：2710"></div>
+          <div class="field"><label>&nbsp;</label><button id="generateTournamentCodeBtn" class="btn ghost" type="button">コードを自動生成</button></div>
           <div class="field"><label>&nbsp;</label><button id="buildTournamentBtn" class="btn" type="button">Round 1から生成</button></div>
         </div>
       </section>
@@ -50,6 +52,7 @@
         <div class="panelHeader"><h2>生成結果</h2><span class="badge">保存後確認済み</span></div>
         <div class="formGrid three">
           <div class="field"><label>大会ID</label><strong id="buildResultId">-</strong></div>
+          <div class="field"><label>短縮大会コード</label><strong id="buildResultCode">-</strong></div>
           <div class="field"><label>state.groups</label><strong id="buildResultGroups">0組</strong></div>
           <div class="field"><label>選手数</label><strong id="buildResultPlayers">0名</strong></div>
         </div>
@@ -116,6 +119,17 @@
       return (hash >>> 0).toString(36);
     }
 
+    function normalizeTournamentCode(value) {
+      return String(value || '')
+        .replace(/[０-９]/g, character => String.fromCharCode(character.charCodeAt(0) - 0xFEE0))
+        .replace(/\D/g, '')
+        .slice(0, 6);
+    }
+
+    function randomTournamentCode() {
+      return String(Math.floor(1000 + Math.random() * 900000)).padStart(4, '0').slice(0, 6);
+    }
+
     function suggestedTournamentId(tournament) {
       if (!tournament) return '';
       const source = tournament.scoreTournamentId || tournament.id || tournament.name || '';
@@ -147,11 +161,12 @@
       return '';
     }
 
-    function renderBuildResult(targetId, state) {
+    function renderBuildResult(targetId, tournamentCode, state) {
       const summary = stateSummary(state);
       const query = `?tournament=${encodeURIComponent(targetId)}`;
       $('buildResultPanel').hidden = false;
       $('buildResultId').textContent = targetId;
+      $('buildResultCode').textContent = tournamentCode;
       $('buildResultGroups').textContent = `${summary.groupCount}組`;
       $('buildResultPlayers').textContent = `${summary.playerCount}名`;
       $('buildHqLink').href = `./hq.html${query}`;
@@ -197,10 +212,12 @@
       if (!tournament) {
         $('buildTournamentMeta').textContent = '大会を選択してください。';
         $('scoreTournamentId').value = '';
+        $('scoreTournamentCode').value = '';
         return;
       }
       $('buildTournamentMeta').textContent = `${tournament.venue || '-'} / ${Number(tournament.roundCount || 1)}R / ${tournament.startDate || '-'} ～ ${tournament.endDate || '-'}`;
       $('scoreTournamentId').value = suggestedTournamentId(tournament);
+      $('scoreTournamentCode').value = normalizeTournamentCode(tournament.tournamentCode || tournament.scoreBuild?.tournamentCode || '');
     }
 
     function subscribeTournaments() {
@@ -279,18 +296,36 @@
     async function buildTournament() {
       const tournament = selectedTournament();
       const targetId = safeTournamentId($('scoreTournamentId').value);
+      const tournamentCode = normalizeTournamentCode($('scoreTournamentCode').value);
       if (!tournament) return PGAPlatform.showToast('大会を選択してください。');
       if (!targetId) return PGAPlatform.showToast('生成先の大会IDは半角英数字、_、-を含めて入力してください。');
+      if (!/^\d{4,6}$/.test(tournamentCode)) return PGAPlatform.showToast('短縮大会コードを数字4〜6桁で入力してください。');
       if (!appState.roundOnePairings.length) return PGAPlatform.showToast('Round 1の組合せがありません。');
       try {
         $('scoreTournamentId').value = targetId;
-        const targetRef = PGAPlatform.db().collection('tournaments').doc(targetId);
-        const existing = await targetRef.get();
+        $('scoreTournamentCode').value = tournamentCode;
+        const database = PGAPlatform.db();
+        const targetRef = database.collection('tournaments').doc(targetId);
+        const codeRef = database.collection('tournamentCodes').doc(tournamentCode);
+        const previousCode = normalizeTournamentCode(tournament.tournamentCode || tournament.scoreBuild?.tournamentCode || '');
+        const previousCodeRef = previousCode && previousCode !== tournamentCode
+          ? database.collection('tournamentCodes').doc(previousCode)
+          : null;
+        const [existing, existingCode, previousCodeSnapshot] = await Promise.all([
+          targetRef.get(),
+          codeRef.get(),
+          previousCodeRef ? previousCodeRef.get() : Promise.resolve(null)
+        ]);
+        const mappedTournamentId = existingCode.exists ? safeTournamentId(existingCode.data()?.tournamentId) : '';
+        if (mappedTournamentId && mappedTournamentId !== targetId) {
+          return PGAPlatform.showToast(`大会コード ${tournamentCode} は別の大会で使用されています。`);
+        }
         if (existing.exists && !window.confirm(`tournaments/${targetId} のstateをRound 1初期状態で置き換えますか？`)) return;
         const state = PGAPlatform.buildInitialScoreState(tournament, appState.roundOnePairings);
         state.tournamentId = targetId;
         state.id = targetId;
         state.activeTournamentId = targetId;
+        state.tournamentCode = tournamentCode;
         const validationError = validateGeneratedState(state);
         if (validationError) {
           window.alert(`生成を中止しました。\n${validationError}`);
@@ -300,6 +335,7 @@
         const payload = {
           state,
           tournamentId: targetId,
+          tournamentCode,
           updatedAt: PGAPlatform.serverTimestamp(),
           updatedAtIso: now,
           source: 'platform-v17.0-phase4b-tournament-link-fix',
@@ -307,17 +343,40 @@
           buildVersion: 'v17.0-phase4b-link-fix'
         };
         if (!existing.exists) payload.createdAt = PGAPlatform.serverTimestamp();
-        await targetRef.set(payload, { merge: true });
+        const codePayload = {
+          code: tournamentCode,
+          tournamentId: targetId,
+          tournamentName: state.tournamentName,
+          masterTournamentId: tournament.id,
+          active: true,
+          updatedAt: PGAPlatform.serverTimestamp()
+        };
+        if (!existingCode.exists) codePayload.createdAt = PGAPlatform.serverTimestamp();
+        const batch = database.batch();
+        batch.set(targetRef, payload, { merge: true });
+        batch.set(codeRef, codePayload, { merge: true });
+        if (previousCodeRef && previousCodeSnapshot?.exists) {
+          const previousTournamentId = safeTournamentId(previousCodeSnapshot.data()?.tournamentId);
+          if (previousTournamentId === targetId) {
+            batch.set(previousCodeRef, {
+              active: false,
+              replacedBy: tournamentCode,
+              updatedAt: PGAPlatform.serverTimestamp()
+            }, { merge: true });
+          }
+        }
+        batch.set(masterRef(), {
+          tournamentCode,
+          scoreTournamentId: targetId,
+          scoreBuild: { tournamentId: targetId, tournamentCode, builtRound: 1, updatedAt: PGAPlatform.serverTimestamp() },
+          updatedAt: PGAPlatform.serverTimestamp()
+        }, { merge: true });
+        await batch.commit();
         const savedSnapshot = await targetRef.get();
         const savedState = savedSnapshot.data()?.state;
         const savedValidationError = validateGeneratedState(savedState);
         if (savedValidationError) throw new Error(`保存後確認に失敗しました: ${savedValidationError}`);
-        await masterRef().set({
-          scoreTournamentId: targetId,
-          scoreBuild: { tournamentId: targetId, builtRound: 1, updatedAt: PGAPlatform.serverTimestamp() },
-          updatedAt: PGAPlatform.serverTimestamp()
-        }, { merge: true });
-        renderBuildResult(targetId, savedState);
+        renderBuildResult(targetId, tournamentCode, savedState);
         const summary = stateSummary(savedState);
         PGAPlatform.showToast(`tournaments/${targetId} を生成しました（${summary.groupCount}組 / ${summary.playerCount}名）。`);
       } catch (error) {
@@ -335,9 +394,15 @@
       });
       $('reloadBuildPreviewBtn').onclick = loadBuildPreview;
       $('buildTournamentBtn').onclick = buildTournament;
+      $('generateTournamentCodeBtn').onclick = () => {
+        $('scoreTournamentCode').value = randomTournamentCode();
+      };
       $('scoreTournamentId').addEventListener('blur', () => {
         const normalized = safeTournamentId($('scoreTournamentId').value) || suggestedTournamentId(selectedTournament());
         $('scoreTournamentId').value = normalized;
+      });
+      $('scoreTournamentCode').addEventListener('input', () => {
+        $('scoreTournamentCode').value = normalizeTournamentCode($('scoreTournamentCode').value);
       });
     }
 

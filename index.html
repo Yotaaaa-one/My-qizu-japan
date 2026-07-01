@@ -6691,6 +6691,145 @@ window.addEventListener('load', function(){
 })();
 </script>
 
+<style id="v170-tournament-code-login-style">
+#v170TournamentCodePanel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #b8c8c1;
+  border-radius: 8px;
+  background: #f3f7f5;
+}
+#v170TournamentCodePanel h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+#v170TournamentCodePanel .v170CodeRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) auto;
+  gap: 8px;
+  align-items: end;
+}
+#v170TournamentCodePanel input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+#v170TournamentCodeStatus {
+  min-height: 22px;
+  margin-top: 8px;
+  font-weight: 800;
+}
+@media (max-width: 620px) {
+  #v170TournamentCodePanel .v170CodeRow { grid-template-columns: 1fr; }
+}
+</style>
+<script id="v170-tournament-code-login">
+(function(){
+  function byId(id){ return document.getElementById(id); }
+  function normalizeCode(value){
+    return String(value || '')
+      .replace(/[０-９]/g, function(character){ return String.fromCharCode(character.charCodeAt(0) - 0xFEE0); })
+      .replace(/\D/g, '')
+      .slice(0, 6);
+  }
+  function setStatus(message, isError){
+    const status = byId('v170TournamentCodeStatus');
+    if (!status) return;
+    status.textContent = message || '';
+    status.style.color = isError ? '#b42318' : '#14532d';
+  }
+  function setBusy(busy){
+    const button = byId('v170TournamentCodeLoginBtn');
+    const input = byId('v170TournamentCodeInput');
+    if (button) {
+      button.disabled = busy;
+      button.textContent = busy ? '大会を確認中...' : '大会コードで開く';
+    }
+    if (input) input.disabled = busy;
+  }
+  async function openTournamentByCode(event){
+    if (event) event.preventDefault();
+    const code = normalizeCode(byId('v170TournamentCodeInput')?.value);
+    if (byId('v170TournamentCodeInput')) byId('v170TournamentCodeInput').value = code;
+    if (!/^\d{4,6}$/.test(code)) {
+      setStatus('大会コードを数字4〜6桁で入力してください。', true);
+      return;
+    }
+    setBusy(true);
+    setStatus('大会コードを確認しています。', false);
+    try {
+      if (!window.firebase) throw new Error('Firebase SDKを読み込めませんでした。');
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      const database = firebase.firestore();
+      const codeSnapshot = await database.collection('tournamentCodes').doc(code).get();
+      if (!codeSnapshot.exists) throw new Error('大会コードが見つかりません。');
+      const codeData = codeSnapshot.data() || {};
+      if (codeData.active === false) throw new Error('この大会コードは現在利用できません。');
+      const rawTournamentId = String(codeData.tournamentId || '').trim();
+      const tournamentId = typeof sanitizeTournamentId === 'function'
+        ? sanitizeTournamentId(rawTournamentId)
+        : rawTournamentId;
+      if (!rawTournamentId || !tournamentId) throw new Error('大会コードの登録内容が不正です。');
+      const tournamentSnapshot = await database.collection('tournaments').doc(tournamentId).get();
+      const tournamentState = tournamentSnapshot.exists ? tournamentSnapshot.data()?.state : null;
+      if (!tournamentState || !Array.isArray(tournamentState.groups) || !tournamentState.groups.length) {
+        throw new Error('大会データまたは組合せがまだ生成されていません。');
+      }
+      try {
+        if (typeof TOURNAMENT_ID_STORAGE_KEY !== 'undefined') localStorage.setItem(TOURNAMENT_ID_STORAGE_KEY, tournamentId);
+        if (typeof v151RememberTournament === 'function') {
+          v151RememberTournament(tournamentId, codeData.tournamentName || tournamentState.tournamentName || tournamentId);
+        }
+      } catch (storageError) {
+        console.warn('大会コードの端末保存に失敗しました', storageError);
+      }
+      setStatus(`${tournamentState.tournamentName || codeData.tournamentName || tournamentId} を開きます。`, false);
+      const url = new URL('scorer.html', window.location.href);
+      url.searchParams.set('tournament', tournamentId);
+      window.location.assign(url.toString());
+    } catch (error) {
+      console.warn('大会コード照合に失敗しました', error);
+      setStatus(error.message || '大会コードを確認できませんでした。', true);
+      setBusy(false);
+    }
+  }
+  function installTournamentCodeLogin(){
+    const gate = byId('scorerLoginGate');
+    if (!gate || byId('v170TournamentCodePanel')) return;
+    const panel = document.createElement('div');
+    panel.id = 'v170TournamentCodePanel';
+    panel.innerHTML = `
+      <h3>大会コードでログイン</h3>
+      <div class="v170CodeRow">
+        <div class="selectBox">
+          <label for="v170TournamentCodeInput">大会コード（数字4〜6桁）</label>
+          <input id="v170TournamentCodeInput" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="大会コードを入力">
+        </div>
+        <button class="blue" id="v170TournamentCodeLoginBtn" type="button">大会コードで開く</button>
+      </div>
+      <div id="v170TournamentCodeStatus" role="status" aria-live="polite"></div>
+      <p class="small">大会一覧が更新されていない場合も、配布された大会コードから直接開けます。</p>`;
+    const description = gate.querySelector('p.small');
+    if (description) description.after(panel);
+    else gate.prepend(panel);
+    const input = byId('v170TournamentCodeInput');
+    input?.addEventListener('input', function(){ this.value = normalizeCode(this.value); });
+    input?.addEventListener('keydown', function(event){
+      if (event.key === 'Enter') openTournamentByCode(event);
+    });
+    byId('v170TournamentCodeLoginBtn')?.addEventListener('click', openTournamentByCode);
+  }
+  window.v170OpenTournamentByCode = openTournamentByCode;
+  window.addEventListener('DOMContentLoaded', installTournamentCodeLogin);
+  window.addEventListener('load', installTournamentCodeLogin);
+  setTimeout(installTournamentCodeLogin, 300);
+})();
+</script>
+
 <script src="score-colors-v16.6.1.js"></script>
 <script src="round-cut-v16.6.1.js"></script>
 <script src="round-scores-v16.6.1.js"></script>
