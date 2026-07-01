@@ -1808,10 +1808,14 @@ function getTournamentIdFromUrl() {
   return new URLSearchParams(window.location.search).get("tournament");
 }
 
-let FIREBASE_TOURNAMENT_ID = sanitizeTournamentId(
-  getTournamentIdFromUrl() ||
-  localStorage.getItem(TOURNAMENT_ID_STORAGE_KEY) ||
-  "demo_tournament_v1646"
+function tournamentDocumentIdFromUrl(value) {
+  const id = String(value || "").trim();
+  return id && id.length <= 120 && !id.includes("/") ? id : "";
+}
+
+const TOURNAMENT_ID_FROM_URL = tournamentDocumentIdFromUrl(getTournamentIdFromUrl());
+let FIREBASE_TOURNAMENT_ID = TOURNAMENT_ID_FROM_URL || sanitizeTournamentId(
+  localStorage.getItem(TOURNAMENT_ID_STORAGE_KEY) || "demo_tournament_v1646"
 );
 
 const firebaseConfig = {
@@ -6653,6 +6657,81 @@ body.pga-v16411-scorer[data-tab="scorerRanking"] #scorerRankingScreen {
   window.addEventListener('DOMContentLoaded', function(){ setTimeout(init, 0); });
   window.addEventListener('load', function(){ init(); setTimeout(init, 350); setTimeout(function(){ activate(current,false); bind(); }, 1600); });
   setTimeout(init, 100);
+})();
+</script>
+
+<script id="v170-phase4b-unlock-fix">
+(function(){
+  const LOCK_KEY = 'pga_score_v1646_device_lock';
+  function closeUnlockModal(){
+    const modal = document.getElementById('v170UnlockModal');
+    if (modal) modal.style.display = 'none';
+  }
+  function unlockDevice(){
+    const input = document.getElementById('v170UnlockPassword');
+    if (String(input?.value || '').trim() !== '000000') {
+      const error = document.getElementById('v170UnlockError');
+      if (error) error.textContent = '解除パスワードが違います';
+      return;
+    }
+    try { localStorage.removeItem(LOCK_KEY); } catch (error) {}
+    if (typeof v161HardUnlockLocalOnly === 'function') v161HardUnlockLocalOnly();
+    closeUnlockModal();
+    if (typeof toast === 'function') toast('端末ロックを解除しました');
+    setTimeout(function(){ window.location.href = 'index.html?reset=1'; }, 300);
+  }
+  function ensureUnlockModal(){
+    let modal = document.getElementById('v170UnlockModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'v170UnlockModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+      <div style="width:min(420px,100%);background:#fff;border-radius:8px;padding:20px;box-shadow:0 18px 48px rgba(0,0,0,.28);">
+        <h2 style="margin:0 0 14px;font-size:20px;">端末ロック解除</h2>
+        <label for="v170UnlockPassword">本部解除パスワード</label>
+        <input id="v170UnlockPassword" type="password" inputmode="numeric" maxlength="6" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:6px;">
+        <div id="v170UnlockError" role="alert" style="min-height:22px;margin-top:8px;color:#b42318;font-weight:800;"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+          <button id="v170UnlockCancel" class="ghost" type="button">キャンセル</button>
+          <button id="v170UnlockConfirm" class="blue" type="button">解除する</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('v170UnlockCancel')?.addEventListener('click', closeUnlockModal);
+    document.getElementById('v170UnlockConfirm')?.addEventListener('click', unlockDevice);
+    document.getElementById('v170UnlockPassword')?.addEventListener('keydown', function(event){
+      if (event.key === 'Enter') unlockDevice();
+    });
+    return modal;
+  }
+  function openUnlockModal(){
+    const modal = ensureUnlockModal();
+    const input = document.getElementById('v170UnlockPassword');
+    const error = document.getElementById('v170UnlockError');
+    if (input) input.value = '';
+    if (error) error.textContent = '';
+    modal.style.display = 'flex';
+    setTimeout(function(){ input?.focus(); }, 0);
+  }
+  function installUnlock(){
+    const button = document.getElementById('v161UnlockBtn');
+    if (!button || button.dataset.v170LoginFlowUnlock === '1') return;
+    button.dataset.v170LoginFlowUnlock = '1';
+    button.addEventListener('click', function(event){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openUnlockModal();
+    }, true);
+  }
+  window.v170OpenUnlockModal = openUnlockModal;
+  window.addEventListener('DOMContentLoaded', function(){ setTimeout(installUnlock, 700); });
+  window.addEventListener('load', function(){
+    installUnlock();
+    setTimeout(installUnlock, 1200);
+    setTimeout(installUnlock, 2200);
+  });
+  setTimeout(installUnlock, 1400);
 })();
 </script>
 
