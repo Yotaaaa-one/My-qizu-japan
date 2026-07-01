@@ -449,6 +449,7 @@
   function scoreGroupsFromPairings(pairings, options = {}) {
     const round = Math.max(1, Math.min(4, Number(options.round || 1)));
     const roundCount = Math.max(round, Math.min(4, Number(options.roundCount || round)));
+    const groupMode = options.mode === 'test' ? 'test' : 'live';
     const existingPlayers = options.existingPlayers && typeof options.existingPlayers.get === 'function' ? options.existingPlayers : new Map();
     return (pairings || []).slice().sort((left, right) => Number(left.groupId || left.id || 0) - Number(right.groupId || right.id || 0)).map(pairing => {
       const groupId = Number(pairing.groupId || pairing.id || 0);
@@ -489,7 +490,7 @@
         startHole: Number(pairing.startHole) === 10 ? 10 : 1,
         plannedStart,
         roundStarts: { [String(round)]: plannedStart },
-        mode: 'test',
+        mode: groupMode,
         liveStartedAt: null,
         liveStartDiff: null,
         players
@@ -515,7 +516,7 @@
 
   function buildInitialScoreState(master, roundOnePairings) {
     const roundCount = Math.max(1, Math.min(4, Number(master?.roundCount || 1)));
-    const groups = scoreGroupsFromPairings(roundOnePairings, { round: 1, roundCount });
+    const groups = scoreGroupsFromPairings(roundOnePairings, { round: 1, roundCount, mode: 'live' });
     return {
       tournamentName: master?.name || '',
       roundCount,
