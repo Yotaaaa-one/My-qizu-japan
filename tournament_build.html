@@ -324,6 +324,13 @@
         }
         if (existing.exists && !window.confirm(`tournaments/${targetId} のstateをRound 1初期状態で置き換えますか？`)) return;
         const state = PGAPlatform.buildInitialScoreState(tournament, appState.roundOnePairings);
+        const existingGroups = Array.isArray(existing.data()?.state?.groups) ? existing.data().state.groups : [];
+        const existingLiveGroupIds = new Set(
+          existingGroups.filter(group => group?.mode === 'live').map(group => String(group.id))
+        );
+        state.groups.forEach(group => {
+          if (existingLiveGroupIds.has(String(group.id))) group.mode = 'live';
+        });
         state.tournamentId = targetId;
         state.id = targetId;
         state.activeTournamentId = targetId;

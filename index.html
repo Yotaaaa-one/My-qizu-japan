@@ -1233,32 +1233,7 @@ body.v163-page-monitor .wrap, body.v163-page-public .wrap { max-width:1400px; }
         <span class="pill">SCORER LOGIN</span>
         <h2 class="holeTitle">スコアラー端末ログイン</h2>
       </div>
-      <p class="small">本部担当者が大会・担当組を選択して端末を固定します。ログイン後、スコアラー側では担当解除できません。</p>
-      <div class="row" style="margin-top:12px;">
-        <div class="selectBox">
-          <label>大会名</label>
-          <select id="scorerLoginTournamentSelect"></select>
-        </div>
-        <div class="selectBox">
-          <label>担当組</label>
-          <select id="scorerLoginGroupSelect"></select>
-        </div>
-      </div>
-      <div class="row" style="margin-top:10px;">
-        <div class="selectBox">
-          <label>ログイン用ランダムパスワード（数字4桁）</label>
-          <div class="loginCodeBox" id="scorerLoginCodeBox">----</div>
-        </div>
-        <div class="selectBox">
-          <label>解除用パスワード（全大会共通）</label>
-          <div class="loginStatusBox" style="margin-top:0;">本部解除PW：<strong>000000</strong></div>
-        </div>
-      </div>
-      <div class="utility">
-        <button class="ghost" id="generateScorerLoginCodeBtn">4桁を再生成</button>
-        <button class="blue" id="scorerLoginLockBtn">本部ログインして端末固定</button>
-      </div>
-      <p class="loginDangerText">※ 解除用パスワードは全大会共通で 000000 固定です。スコアラーには通常操作させない運用です。</p>
+      <div id="v170TournamentCodePanel"></div>
     </div>
     <div class="card">
       <div class="row">
@@ -7112,6 +7087,10 @@ window.addEventListener('load', function(){
       setStatus('大会コードを照合し、担当組を選択してください。', true);
       return;
     }
+    const stateGroup = (loginContext.tournamentState?.groups || []).find(function(item){
+      return String(item.id) === String(group.groupId);
+    });
+    if (stateGroup && stateGroup.mode !== 'live') stateGroup.mode = 'test';
     const lockedAt = new Date().toISOString();
     const lock = {
       version: FLOW_VERSION,

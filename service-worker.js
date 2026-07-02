@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pga-tournament-platform-v17_0_phase4b_login_flow_fix_r3';
+const CACHE_NAME = 'pga-tournament-platform-v17_0_phase4b_login_flow_fix_r4';
 const ASSETS = ['./','./index.html','./admin.html','./players_admin.html','./tournaments_admin.html','./entries_admin.html','./pairings_admin.html','./tournament_build.html','./scorer.html','./hq.html','./monitor.html','./monitor_ai.html','./public.html','./manifest.webmanifest','./platform-admin-v17.0.css','./platform-core-v17.0.js','./score-colors-v16.6.1.css','./score-colors-v16.6.1.js','./round-cut-v16.6.1.css','./round-cut-v16.6.1.js','./round-scores-v16.6.1.css','./round-scores-v16.6.1.js','./ranking-thru-hbh-v16.6.2.js','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install', event => { self.skipWaiting(); event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS).catch(()=>{}))); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))); self.clients.claim(); });
